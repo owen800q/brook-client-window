@@ -116,7 +116,7 @@ internal sealed class TrayIcon : IDisposable
     private System.Drawing.Icon Load(string name)
     {
         if (_icons.TryGetValue(name, out var cached)) return cached;
-        var info = Application.GetResourceStream(new Uri($"pack://application:,,,/Assets/{name}.ico"))!;
+        var info = Application.GetResourceStream(new Uri($"pack://application:,,,/BrookClient;component/Assets/{name}.ico"))!;
         using var stream = info.Stream;
         var icon = new System.Drawing.Icon(stream, Forms.SystemInformation.SmallIconSize);
         _icons[name] = icon;

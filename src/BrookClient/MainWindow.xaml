@@ -4,7 +4,7 @@
                    xmlns:retro="https://github.com/owen800q/Retro.NET"
                    xmlns:local="clr-namespace:BrookClient"
                    Title="Brook Client" TitleIcon="Lock"
-                   Icon="pack://application:,,,/Assets/app.ico"
+                   Icon="pack://application:,,,/BrookClient;component/Assets/app.ico"
                    Width="660" Height="620" MinWidth="520" MinHeight="440"
                    WindowStartupLocation="CenterScreen">
   <Window.Resources>

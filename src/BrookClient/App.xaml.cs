@@ -41,11 +41,13 @@ public partial class App : Application
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+        Log.Write($"starting {typeof(App).Assembly.GetName().Version} (pid {Environment.ProcessId}, args: {string.Join(" ", e.Args)})");
 
         _instanceMutex = new Mutex(true, InstanceMutexName, out var first);
         if (!first)
         {
             // Already running: bring its window up instead.
+            Log.Write("another instance is running; asking it to show its window");
             try { EventWaitHandle.OpenExisting(ShowEventName).Set(); } catch (WaitHandleCannotBeOpenedException) { }
             Shutdown();
             return;
