@@ -43,6 +43,7 @@ public sealed class ExeTests
         crashed.Apply(new ProxyPlan(1081, AppConfig.DefaultBypass));
         Assert.True(guard.Current.Enable);
 
+        var before = Diagnostics();
         using var app = Start(data);
         try
         {
@@ -50,7 +51,7 @@ public sealed class ExeTests
             while (true)
             {
                 app.Refresh();
-                Assert.False(app.HasExited, $"BrookClient.exe exited with {(app.HasExited ? app.ExitCode : 0)}; log: {Log(data)}");
+                Assert.False(app.HasExited, $"BrookClient.exe exited with {(app.HasExited ? app.ExitCode : 0)}; log: {Log(data)}; before start: {before}; now: {Diagnostics()}");
                 if (app.MainWindowHandle != IntPtr.Zero) break;
                 if (DateTime.UtcNow > deadline) throw new TimeoutException("no main window; log: " + Log(data));
                 Thread.Sleep(200);
@@ -93,6 +94,18 @@ public sealed class ExeTests
         Assert.Equal(0, watchdog.ExitCode);
         Assert.Equal(guard.Original, guard.Current);
         Assert.False(proxy.IsApplied);
+    }
+
+    /// <summary>Whether the single-instance lock exists, and which BrookClient processes run (with their command lines).</summary>
+    private static string Diagnostics()
+    {
+        var held = Mutex.TryOpenExisting(@"Local\BrookClient.SingleInstance", out var m);
+        m?.Dispose();
+        var procs = Process.GetProcessesByName("BrookClient").Select(p =>
+        {
+            try { return $"{p.Id} started {p.StartTime:HH:mm:ss.fff}"; } catch (Exception e) { return $"{p.Id} ({e.Message})"; }
+        });
+        return $"mutex exists={held}, self pid={Environment.ProcessId}, BrookClient processes=[{string.Join("; ", procs)}]";
     }
 
     private static string Log(string data)
