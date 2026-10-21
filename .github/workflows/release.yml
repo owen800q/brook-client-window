@@ -1,0 +1,59 @@
+name: Release
+
+# Every commit that lands on main (direct push or merged PR) builds and publishes a release.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Pick version
+        id: version
+        shell: bash
+        # YYYY.MMDD.<run number>: three integers, always increasing, unique per run.
+        run: echo "version=$(date -u +%Y.%m%d).${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+
+      - name: Cache brook downloads
+        uses: actions/cache@v4
+        with:
+          path: vendor/dl
+          key: brook-release-${{ hashFiles('scripts/fetch-brook.ps1') }}
+
+      - name: Test
+        shell: pwsh
+        run: |
+          scripts/fetch-brook.ps1
+          dotnet test BrookClient.sln -c Release
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+
+      - name: Build and package
+        shell: pwsh
+        run: |
+          scripts/build.ps1 -Arch x64 -Version ${{ steps.version.outputs.version }}
+          scripts/build.ps1 -Arch arm64 -Version ${{ steps.version.outputs.version }}
+
+      - name: Publish GitHub release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          gh release create "v$VERSION" build/BrookClient-$VERSION-windows-*.zip build/BrookClient-$VERSION-windows-*.zip.sha256 \
+            --target "$GITHUB_SHA" \
+            --title "Brook Client for Windows $VERSION" \
+            --generate-notes

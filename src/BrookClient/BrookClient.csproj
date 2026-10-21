@@ -1,0 +1,67 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <RootNamespace>BrookClient</RootNamespace>
+    <AssemblyName>BrookClient</AssemblyName>
+    <UseWPF>true</UseWPF>
+    <!-- Only for the notification-area icon (WPF has none); the menus and windows are WPF. -->
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <!-- Lets the project build on Linux/macOS too (CI and development); it only runs on Windows. -->
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <ApplicationIcon>Assets\app.ico</ApplicationIcon>
+    <!-- asInvoker: never asks for administrator rights. -->
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- WFAC010 is for WinForms apps; this is a WPF app, which reads its DPI mode from the manifest. -->
+    <NoWarn>$(NoWarn);WFAC010</NoWarn>
+    <Product>Brook Client</Product>
+    <Description>Brook client for Windows that keeps your LAN outside the proxy</Description>
+    <Version Condition="'$(Version)' == ''">0.0.0</Version>
+  </PropertyGroup>
+
+  <!-- Publishing: one self-contained exe, so no .NET runtime install (which needs admin) is required.
+       Plain builds stay framework-dependent so the test projects can reference this one. -->
+  <PropertyGroup Condition="'$(_IsPublishing)' == 'true'">
+    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == ''">win-x64</RuntimeIdentifier>
+    <SelfContained>true</SelfContained>
+    <PublishSingleFile>true</PublishSingleFile>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+    <DebugType>embedded</DebugType>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- WPF and WinForms both define Application, MessageBox, ... ; keep WPF's. -->
+    <Using Remove="System.Windows.Forms" />
+    <Using Remove="System.Drawing" />
+    <Using Include="System.IO" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Retro.NET" Version="1.0.11" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\BrookCore\BrookCore.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- App.xaml is a plain page: Main lives in App.xaml.cs so the watchdog mode starts without any UI. -->
+    <ApplicationDefinition Remove="App.xaml" />
+    <Page Include="App.xaml" />
+    <Resource Include="Assets\*.ico" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="BrookClient.WindowsTests" />
+  </ItemGroup>
+
+</Project>

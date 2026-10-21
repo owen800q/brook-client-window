@@ -1,0 +1,227 @@
+<retro:RetroWindow x:Class="BrookClient.MainWindow"
+                   xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                   xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                   xmlns:retro="https://github.com/owen800q/Retro.NET"
+                   xmlns:local="clr-namespace:BrookClient"
+                   Title="Brook Client" TitleIcon="Lock"
+                   Icon="pack://application:,,,/Assets/app.ico"
+                   Width="660" Height="620" MinWidth="520" MinHeight="440"
+                   WindowStartupLocation="CenterScreen">
+  <Window.Resources>
+    <Style x:Key="Caption" TargetType="TextBlock" BasedOn="{StaticResource Retro.Text.Help}">
+      <Setter Property="TextWrapping" Value="Wrap" />
+      <Setter Property="Margin" Value="0,2,0,6" />
+    </Style>
+    <Style x:Key="Tab" TargetType="ScrollViewer">
+      <Setter Property="VerticalScrollBarVisibility" Value="Auto" />
+      <Setter Property="HorizontalScrollBarVisibility" Value="Disabled" />
+      <Setter Property="Padding" Value="10" />
+    </Style>
+  </Window.Resources>
+
+  <Window.InputBindings>
+    <KeyBinding Key="S" Modifiers="Control" Command="{x:Static local:MainWindow.SaveCommand}" />
+  </Window.InputBindings>
+  <Window.CommandBindings>
+    <CommandBinding Command="{x:Static local:MainWindow.SaveCommand}" Executed="Save_Click" />
+  </Window.CommandBindings>
+
+  <DockPanel>
+    <Menu DockPanel.Dock="Top">
+      <MenuItem Header="_Connection">
+        <MenuItem x:Name="ConnectMenu" Header="_Connect" retro:Assist.Icon="Execute" Click="Connect_Click" />
+        <MenuItem x:Name="DisconnectMenu" Header="_Disconnect" retro:Assist.Icon="Close" Click="Disconnect_Click" />
+        <Separator />
+        <MenuItem Header="_Save Settings" InputGestureText="Ctrl+S" retro:Assist.Icon="Save" Click="Save_Click" />
+        <MenuItem Header="_Close Window" Click="CloseWindow_Click" />
+        <Separator />
+        <MenuItem Header="E_xit Brook Client" Click="Exit_Click" />
+      </MenuItem>
+      <MenuItem Header="_Servers">
+        <MenuItem Header="_Paste Links from Clipboard" retro:Assist.Icon="Paste" Click="Paste_Click" />
+        <MenuItem Header="_Add Empty Server" retro:Assist.Icon="Plus" Click="AddBlank_Click" />
+      </MenuItem>
+      <MenuItem Header="_View">
+        <MenuItem Header="brook _Log" retro:Assist.Icon="Document" Click="OpenLog_Click" />
+        <MenuItem Header="_Client Log" Click="OpenClientLog_Click" />
+        <MenuItem Header="Settings _Folder" retro:Assist.Icon="Folder" Click="OpenFolder_Click" />
+      </MenuItem>
+      <MenuItem Header="_Help">
+        <MenuItem Header="_About Brook Client" retro:Assist.Icon="Info" Click="About_Click" />
+      </MenuItem>
+    </Menu>
+
+    <ToolBar DockPanel.Dock="Top">
+      <Button x:Name="ConnectButton" retro:Assist.Icon="Execute" Content="Connect" ToolTip="Connect to the selected server" Click="Connect_Click" />
+      <Button x:Name="DisconnectButton" retro:Assist.Icon="Close" Content="Disconnect" Click="Disconnect_Click" />
+      <Separator />
+      <Button retro:Assist.Icon="Paste" Content="Paste Links" ToolTip="Add the brook:// links on the clipboard" Click="Paste_Click" />
+      <Separator />
+      <Button retro:Assist.Icon="Save" ToolTip="Save settings (Ctrl+S)" Click="Save_Click" IsEnabled="{Binding CanSave}" />
+      <Button retro:Assist.Icon="Document" ToolTip="Open the brook log" Click="OpenLog_Click" />
+    </ToolBar>
+
+    <StatusBar DockPanel.Dock="Bottom">
+      <StatusBarItem>
+        <TextBlock x:Name="StatusBarText" Text="Disconnected" TextTrimming="CharacterEllipsis" />
+      </StatusBarItem>
+    </StatusBar>
+
+    <!-- Save/Revert stay pinned at the bottom so they are reachable on short screens. -->
+    <retro:Bevel DockPanel.Dock="Bottom" Kind="Raised" Padding="8,6">
+      <DockPanel LastChildFill="True">
+        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+          <Button Content="_Revert" MinWidth="72" Margin="0,0,6,0" Click="Revert_Click" IsEnabled="{Binding IsDirty}"
+                  ToolTip="Discard unsaved changes" />
+          <Button Content="_Save" MinWidth="72" IsDefault="True" Click="Save_Click" IsEnabled="{Binding CanSave}" />
+        </StackPanel>
+        <TextBlock Text="{Binding FirstError}" Foreground="{DynamicResource Retro.StatusError}" VerticalAlignment="Center"
+                   TextTrimming="CharacterEllipsis" Margin="0,0,8,0" ToolTipService.ShowOnDisabled="True">
+          <TextBlock.ToolTip>
+            <ItemsControl ItemsSource="{Binding Errors}" />
+          </TextBlock.ToolTip>
+        </TextBlock>
+      </DockPanel>
+    </retro:Bevel>
+
+    <DockPanel Margin="6">
+      <retro:MessageStrip x:Name="Status" DockPanel.Dock="Top" Severity="Info" IsClosable="False" Margin="0,0,0,6">
+        <StackPanel>
+          <TextBlock x:Name="StatusLine" FontWeight="Bold" Text="Disconnected" TextWrapping="Wrap" />
+          <TextBlock x:Name="StatusDetail" TextWrapping="Wrap" Visibility="Collapsed" />
+        </StackPanel>
+      </retro:MessageStrip>
+
+      <TabControl x:Name="Tabs">
+        <TabItem Header="Servers">
+          <DockPanel Margin="10">
+            <StackPanel DockPanel.Dock="Bottom" Margin="0,8,0,0">
+              <StackPanel Orientation="Horizontal">
+                <Button retro:Assist.Icon="Paste" Content="Paste Links from Clipboard" Click="Paste_Click" Margin="0,0,6,0" />
+                <Button retro:Assist.Icon="Plus" Content="Add Empty" Click="AddBlank_Click" />
+              </StackPanel>
+              <TextBlock Style="{StaticResource Caption}"
+                         Text="Copy one or more brook:// links (from `brook link` or your provider), then click Paste. The selected server (●) is used for Connect." />
+            </StackPanel>
+
+            <Grid>
+              <retro:EmptyState Icon="Document" Title="No servers yet"
+                                Description="Copy a brook:// link, then click Paste Links from Clipboard."
+                                Visibility="{Binding HasProfiles, Converter={x:Static local:BoolToVisibilityConverter.Inverted}}"
+                                x:Name="EmptyServers" />
+              <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                <ItemsControl ItemsSource="{Binding Profiles}" x:Name="ServerList">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate DataType="{x:Type local:ProfileRow}">
+                      <Grid Margin="0,0,0,6">
+                        <Grid.ColumnDefinitions>
+                          <ColumnDefinition Width="Auto" />
+                          <ColumnDefinition Width="120" />
+                          <ColumnDefinition Width="*" MinWidth="160" />
+                          <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                          <RowDefinition Height="Auto" />
+                          <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <RadioButton GroupName="ActiveServer" VerticalAlignment="Center" Margin="0,0,6,0"
+                                     IsChecked="{Binding IsSelected, Mode=TwoWay}" ToolTip="Use this server" />
+                        <TextBox Grid.Column="1" Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,6,0"
+                                 retro:Assist.Placeholder="Name" ToolTip="Name shown in the menu" />
+                        <TextBox Grid.Column="2" Text="{Binding Link, UpdateSourceTrigger=PropertyChanged}"
+                                 FontFamily="{StaticResource Retro.FontFamily.Mono}"
+                                 retro:Assist.Placeholder="brook://…"
+                                 retro:Assist.IsError="{Binding LinkError, Converter={x:Static local:NotNullConverter.Instance}}" />
+                        <Button Grid.Column="3" Style="{StaticResource Retro.IconButton}" retro:Assist.Icon="Delete" Margin="6,0,0,0"
+                                ToolTip="Remove this server" Click="RemoveServer_Click" />
+                        <TextBlock Grid.Row="1" Grid.Column="2" Text="{Binding LinkError}" Foreground="{DynamicResource Retro.StatusError}"
+                                   Style="{StaticResource Retro.Text.Help}"
+                                   Visibility="{Binding LinkError, Converter={x:Static local:NotNullConverter.Visibility}}" />
+                      </Grid>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </ScrollViewer>
+            </Grid>
+          </DockPanel>
+        </TabItem>
+
+        <TabItem Header="Connection">
+          <ScrollViewer Style="{StaticResource Tab}">
+            <StackPanel>
+              <GroupBox Header="Windows proxy">
+                <StackPanel Margin="4">
+                  <CheckBox Content="Set the Windows proxy while connected" IsChecked="{Binding SetSystemProxy}" />
+                  <TextBlock Style="{StaticResource Caption}"
+                             Text="Edge, Chrome and most apps follow the Windows proxy, so they go through Brook; the addresses on the Bypass tab, your LAN and localhost go direct. This is a per-user setting, so no administrator rights are needed. Your previous proxy settings are restored on disconnect, exit or crash. Turn it off to only run the local proxies below and point apps at them yourself." />
+                  <TextBlock Style="{StaticResource Caption}"
+                             Text="Command-line tools (such as sdb, adb or git) usually ignore the Windows proxy and always connect directly, so they keep reaching your LAN." />
+                </StackPanel>
+              </GroupBox>
+              <GroupBox Header="Local proxies" Margin="0,8,0,0">
+                <StackPanel Margin="4">
+                  <retro:FormField Label="SOCKS5 port" LabelWidth="110" HelpText="127.0.0.1 only; for apps you configure by hand.">
+                    <TextBox Text="{Binding SocksPort, UpdateSourceTrigger=PropertyChanged}" Width="80" HorizontalAlignment="Left" />
+                  </retro:FormField>
+                  <retro:FormField Label="HTTP port" LabelWidth="110" HelpText="127.0.0.1 only; the Windows proxy points here.">
+                    <TextBox Text="{Binding HttpPort, UpdateSourceTrigger=PropertyChanged}" Width="80" HorizontalAlignment="Left" />
+                  </retro:FormField>
+                </StackPanel>
+              </GroupBox>
+              <GroupBox Header="Server" Margin="0,8,0,0">
+                <StackPanel Margin="4">
+                  <CheckBox Content="UDP over TCP" IsChecked="{Binding UdpOverTcp}" />
+                  <TextBlock Style="{StaticResource Caption}"
+                             Text="Carries UDP inside the TCP stream. Needed when your server's firewall blocks UDP; otherwise DNS through Brook fails." />
+                </StackPanel>
+              </GroupBox>
+            </StackPanel>
+          </ScrollViewer>
+        </TabItem>
+
+        <TabItem Header="Bypass">
+          <DockPanel Margin="10">
+            <TextBlock DockPanel.Dock="Top" Style="{StaticResource Caption}"
+                       Text="These addresses never go through Brook. One IPv4 address or CIDR per line. Defaults: your private networks (LAN), link-local and multicast." />
+            <StackPanel DockPanel.Dock="Bottom" Margin="0,6,0,0">
+              <Button Content="Reset to Private Networks" HorizontalAlignment="Left" Click="ResetBypass_Click" />
+              <TextBlock Style="{StaticResource Caption}"
+                         Text="Windows matches these against the address typed in an app (http://192.168.0.10). Names without a dot (http://nas), *.local names and localhost are always bypassed too." />
+            </StackPanel>
+            <TextBox Text="{Binding BypassText, UpdateSourceTrigger=PropertyChanged}" AcceptsReturn="True"
+                     FontFamily="{StaticResource Retro.FontFamily.Mono}"
+                     VerticalScrollBarVisibility="Auto" TextWrapping="NoWrap" VerticalContentAlignment="Top" MinHeight="120" />
+          </DockPanel>
+        </TabItem>
+
+        <TabItem Header="General">
+          <ScrollViewer Style="{StaticResource Tab}">
+            <StackPanel>
+              <GroupBox Header="Startup">
+                <StackPanel Margin="4">
+                  <CheckBox Content="Connect when Brook Client starts" IsChecked="{Binding ConnectOnLaunch}" />
+                  <CheckBox x:Name="LaunchAtLogin" Content="Start Brook Client when I sign in to Windows" Margin="0,6,0,0"
+                            Click="LaunchAtLogin_Click" />
+                  <TextBlock Style="{StaticResource Caption}"
+                             Text="Starts hidden in the notification area. Uses your own startup list (HKCU\...\Run), so no administrator rights are needed. Applies immediately." />
+                </StackPanel>
+              </GroupBox>
+              <GroupBox Header="Files" Margin="0,8,0,0">
+                <StackPanel Margin="4">
+                  <retro:FormField Label="Settings" LabelWidth="70">
+                    <TextBox x:Name="ConfigPath" IsReadOnly="True" FontFamily="{StaticResource Retro.FontFamily.Mono}" />
+                  </retro:FormField>
+                  <retro:FormField Label="Logs" LabelWidth="70">
+                    <TextBox x:Name="LogPath" IsReadOnly="True" FontFamily="{StaticResource Retro.FontFamily.Mono}" />
+                  </retro:FormField>
+                  <TextBlock Style="{StaticResource Caption}"
+                             Text="Settings contain your server links, including passwords. They are stored in your user profile only." />
+                </StackPanel>
+              </GroupBox>
+            </StackPanel>
+          </ScrollViewer>
+        </TabItem>
+      </TabControl>
+    </DockPanel>
+  </DockPanel>
+</retro:RetroWindow>

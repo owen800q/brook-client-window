@@ -1,0 +1,77 @@
+name: CI
+
+# Build and test every branch and pull request. Releases are published by release.yml on main.
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  core:
+    # The core logic is plain .NET, so it is tested on Linux too.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: Build everything (cross-targeting Windows)
+        run: dotnet build BrookClient.sln -c Release
+      - name: Core tests
+        run: dotnet test tests/BrookCore.Tests -c Release --no-build
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Cache brook download
+        uses: actions/cache@v4
+        with:
+          path: vendor/dl
+          key: brook-${{ hashFiles('scripts/fetch-brook.ps1') }}
+
+      - name: Fetch brook
+        shell: pwsh
+        run: scripts/fetch-brook.ps1
+
+      - name: Build
+        run: dotnet build BrookClient.sln -c Release
+
+      - name: Core tests
+        run: dotnet test tests/BrookCore.Tests -c Release --no-build
+
+      # UI snapshots, the real exe, and a live connection through a local brook server with the
+      # per-user Windows proxy. The runner's user is an admin, but nothing here elevates.
+      - name: Windows tests
+        env:
+          SNAPSHOT_DIR: ${{ github.workspace }}/build/snapshots
+        run: dotnet test tests/BrookClient.WindowsTests -c Release --no-build --logger "console;verbosity=normal"
+
+      - name: Upload UI snapshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-snapshots
+          path: build/snapshots
+          if-no-files-found: ignore
+
+      - name: Package
+        shell: pwsh
+        run: scripts/build.ps1 -Version 0.0.${{ github.run_number }}
+
+      - name: Upload package
+        uses: actions/upload-artifact@v4
+        with:
+          name: BrookClient-windows-x64
+          path: build/BrookClient-*-windows-x64.zip
