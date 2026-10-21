@@ -146,6 +146,8 @@ public sealed class UiTests(UiThread ui)
                 tabs.SelectedIndex = 1;
                 w.UpdateLayout();
                 Save(w, "main-proxy-manual.png");
+                foreach (var name in new[] { "UpstreamHostBox", "UpstreamUserBox", "UpstreamPasswordBox" })
+                    Assert.True(((FrameworkElement)w.FindName(name)).ActualWidth >= 200, $"{name} is too narrow to type in");
 
                 model.UpstreamPort = "abc";
                 Assert.Contains(model.Errors, e => e.Contains("Proxy port 'abc'"));

@@ -172,7 +172,7 @@
                   <RadioButton GroupName="Upstream" Content="Use this proxy:" Margin="0,4,0,0" IsChecked="{Binding IsUpstreamManual}" />
                   <StackPanel Margin="20,4,0,0" IsEnabled="{Binding IsUpstreamManual}">
                     <retro:FormField Label="Host" LabelWidth="90">
-                      <TextBox x:Name="UpstreamHostBox" Text="{Binding UpstreamHost, UpdateSourceTrigger=PropertyChanged}"
+                      <TextBox x:Name="UpstreamHostBox" Text="{Binding UpstreamHost, UpdateSourceTrigger=PropertyChanged}" Width="240" HorizontalAlignment="Left"
                                retro:Assist.Placeholder="proxy.company.com" />
                     </retro:FormField>
                     <retro:FormField Label="Port" LabelWidth="90">
@@ -181,10 +181,10 @@
                   </StackPanel>
                   <StackPanel Margin="20,6,0,0" IsEnabled="{Binding IsUpstreamOn}">
                     <retro:FormField Label="Username" LabelWidth="90" HelpText="Leave empty if the proxy needs no login.">
-                      <TextBox x:Name="UpstreamUserBox" Text="{Binding UpstreamUsername, UpdateSourceTrigger=PropertyChanged}" />
+                      <TextBox x:Name="UpstreamUserBox" Text="{Binding UpstreamUsername, UpdateSourceTrigger=PropertyChanged}" Width="240" HorizontalAlignment="Left" />
                     </retro:FormField>
                     <retro:FormField Label="Password" LabelWidth="90" HelpText="Stored encrypted for your Windows account.">
-                      <PasswordBox x:Name="UpstreamPasswordBox" PasswordChanged="UpstreamPassword_Changed" />
+                      <PasswordBox x:Name="UpstreamPasswordBox" PasswordChanged="UpstreamPassword_Changed" Width="240" HorizontalAlignment="Left" />
                     </retro:FormField>
                     <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
                       <Button x:Name="TestProxyButton" retro:Assist.Icon="Check" Content="Test Proxy" Click="TestProxy_Click"
