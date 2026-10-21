@@ -81,6 +81,9 @@ public sealed class SystemProxy(IProxySettingsStore store, string backupPath)
 
     public bool IsApplied => File.Exists(backupPath);
 
+    /// <summary>The user's own proxy settings: the saved ones while ours are applied, otherwise the current ones.</summary>
+    public ProxySettings UserSettings => ReadBackup()?.Previous ?? store.Read();
+
     public void Apply(ProxyPlan plan)
     {
         // Reconnects keep the original backup, so we never "restore" our own proxy.

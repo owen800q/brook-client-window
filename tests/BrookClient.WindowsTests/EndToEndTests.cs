@@ -94,6 +94,86 @@ public sealed class EndToEndTests(UiThread ui)
         ui.Invoke(() => ui.App.Engine.ShutdownSync());
     }
 
+    /// <summary>A network where the internet is only reachable through an HTTP proxy that requires a login.</summary>
+    [Fact]
+    public void ConnectsThroughAuthenticatedHttpProxy()
+    {
+        using var guard = new RegistryGuard();
+        using var server = StartBrookServer();
+        using var corporate = new BrookCore.Tests.TestConnectProxy("alice", "s3cret");
+        var config = ProxyConfig(UpstreamProxyMode.Manual, corporate.Port, "alice", "s3cret");
+        ui.Invoke(() =>
+        {
+            ui.App.InitializeForTests(config, new SystemProxy(new RegistryProxyStore(), Path.Combine(ui.DataDir, "e2e4-backup.json")));
+            ui.App.Engine.Connect(config);
+        });
+        WaitConnected();
+        Assert.Contains($"via proxy 127.0.0.1:{corporate.Port}", ui.Invoke(Describe));
+        Assert.Equal(HttpStatusCode.OK, GetVia(HttpPort));
+        // brook's connections to the server went through the proxy, with the login.
+        Assert.Contains($"127.0.0.1:{ServerPort}", corporate.Tunnels);
+        Assert.Contains(corporate.Requests, r => r.Contains("Proxy-Authorization: Basic "));
+        ui.Invoke(() => ui.App.Engine.Disconnect());
+        ui.WaitFor(() => ui.App.Engine.State is EngineState.Disconnected, TimeSpan.FromSeconds(5), Describe);
+    }
+
+    /// <summary>"Use the Windows proxy": the proxy the user had configured before connecting is detected and used.</summary>
+    [Fact]
+    public void UsesTheWindowsProxyTheUserHad()
+    {
+        using var guard = new RegistryGuard();
+        using var server = StartBrookServer();
+        using var corporate = new BrookCore.Tests.TestConnectProxy("bob", "pw2");
+        var store = new RegistryProxyStore();
+        store.Write(new ProxySettings(true, $"127.0.0.1:{corporate.Port}", "<local>", null)); // the user's corporate proxy
+        var backup = Path.Combine(ui.DataDir, "e2e5-backup.json");
+        var config = ProxyConfig(UpstreamProxyMode.System, 0, "bob", "pw2");
+        ui.Invoke(() =>
+        {
+            ui.App.InitializeForTests(config, new SystemProxy(store, backup));
+            ui.App.Engine.Connect(config);
+        });
+        WaitConnected();
+        Assert.Contains($"via proxy 127.0.0.1:{corporate.Port}", ui.Invoke(Describe));
+        Assert.Equal(HttpStatusCode.OK, GetVia(HttpPort));
+        Assert.Contains($"127.0.0.1:{ServerPort}", corporate.Tunnels);
+        // While connected, apps use brook; on disconnect the corporate proxy comes back.
+        Assert.Equal($"http=127.0.0.1:{HttpPort};https=127.0.0.1:{HttpPort}", guard.Current.Server);
+        ui.Invoke(() => ui.App.Engine.Disconnect());
+        ui.WaitFor(() => !File.Exists(backup), TimeSpan.FromSeconds(10), () => "backup not removed");
+        Assert.Equal($"127.0.0.1:{corporate.Port}", guard.Current.Server);
+    }
+
+    [Fact]
+    public void WrongProxyPasswordFailsClearlyWithoutRetrying()
+    {
+        using var guard = new RegistryGuard();
+        using var server = StartBrookServer();
+        using var corporate = new BrookCore.Tests.TestConnectProxy("alice", "right");
+        var config = ProxyConfig(UpstreamProxyMode.Manual, corporate.Port, "alice", "wrong");
+        ui.Invoke(() =>
+        {
+            ui.App.InitializeForTests(config, new SystemProxy(new RegistryProxyStore(), Path.Combine(ui.DataDir, "e2e6-backup.json")));
+            ui.App.Engine.Connect(config);
+        });
+        ui.WaitFor(() => ui.App.Engine.State is EngineState.Failed, TimeSpan.FromSeconds(20), Describe);
+        Assert.Contains("rejected the username or password", ui.Invoke(Describe));
+        Assert.Equal(guard.Original, guard.Current); // never pointed Windows at a brook that can't connect
+    }
+
+    private static AppConfig ProxyConfig(UpstreamProxyMode mode, int proxyPort, string user, string password) => new()
+    {
+        Profiles = [new Profile("Local", $"brook://server?password=pw&server=127.0.0.1%3A{ServerPort}")],
+        SelectedIndex = 0,
+        SocksPort = SocksPort,
+        HttpPort = HttpPort,
+        UpstreamProxy = mode,
+        UpstreamProxyHost = "127.0.0.1",
+        UpstreamProxyPort = mode == UpstreamProxyMode.Manual ? proxyPort : 8080,
+        UpstreamProxyUsername = user,
+        UpstreamProxyPassword = password,
+    };
+
     [Fact]
     public void ReportsBusyPort()
     {

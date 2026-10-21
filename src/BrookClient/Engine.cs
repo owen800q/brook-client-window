@@ -28,7 +28,9 @@ internal sealed class Engine
         public static Failure Transient(string m) => new(m, true);
     }
 
-    private sealed record Session(AppConfig Config, Process Process, List<string> ServerIPs, string PinnedIP, bool ProxyApplied);
+    /// <summary><paramref name="Relay"/> is set when the server is reached through an upstream HTTP proxy.</summary>
+    private sealed record Session(AppConfig Config, Process Process, List<string> ServerIPs, string PinnedIP, bool ProxyApplied,
+        HttpConnectRelay? Relay = null, UpstreamProxyEndpoint? Upstream = null);
 
     private readonly Dispatcher _ui;
     private readonly SystemProxy _proxy;
@@ -40,6 +42,7 @@ internal sealed class Engine
     private int _generation; // bumps to invalidate in-flight async work
     private DispatcherTimer? _retryTimer;
     private DispatcherTimer? _networkDebounce;
+    private DispatcherTimer? _relayWatch;
 
     public Engine(Dispatcher ui, SystemProxy proxy)
     {
@@ -80,6 +83,7 @@ internal sealed class Engine
         _wantConnected = false;
         _generation++;
         _retryTimer?.Stop();
+        _relayWatch?.Stop();
         var old = _session;
         _session = null;
         State = new EngineState.Disconnected();
@@ -92,6 +96,7 @@ internal sealed class Engine
         _wantConnected = false;
         _generation++;
         _retryTimer?.Stop();
+        _relayWatch?.Stop();
         TearDown(_session);
         _session = null;
     }
@@ -103,6 +108,7 @@ internal sealed class Engine
         _generation++;
         var gen = _generation;
         _retryTimer?.Stop();
+        _relayWatch?.Stop();
         if (config.SelectedProfile is not { } profile)
         {
             State = new EngineState.Failed("No server selected");
@@ -148,11 +154,49 @@ internal sealed class Engine
         var proxy = config.SetSystemProxy
             ? $"Windows proxy → 127.0.0.1:{config.HttpPort}"
             : $"Local proxies only: SOCKS5 127.0.0.1:{config.SocksPort}, HTTP 127.0.0.1:{config.HttpPort}";
-        State = new EngineState.Connected(config.SelectedProfile?.Name ?? "?", $"{proxy} · server {s.PinnedIP} · LAN bypassed");
+        var server = s.Upstream is { } up ? $"server {s.PinnedIP} via proxy {up}" : $"server {s.PinnedIP}";
+        State = new EngineState.Connected(config.SelectedProfile?.Name ?? "?", $"{proxy} · {server} · LAN bypassed");
+        if (s.Relay is { } relay) WatchRelay(s, relay);
     }
+
+    /// <summary>brook keeps running when the proxy starts refusing our login (e.g. the password expired), so watch for it.</summary>
+    private void WatchRelay(Session s, HttpConnectRelay relay)
+    {
+        _relayWatch?.Stop();
+        _relayWatch = new DispatcherTimer(TimeSpan.FromSeconds(3), DispatcherPriority.Normal, (_, _) =>
+        {
+            if (!ReferenceEquals(_session, s)) { _relayWatch?.Stop(); return; }
+            if (relay.LastError is { } e && e.Contains("(407)", StringComparison.Ordinal)) Fail(new Failure(e));
+        }, _ui);
+        _relayWatch.Start();
+    }
+
+    /// <summary>The HTTP proxy to reach <paramref name="link"/>'s server through, or null to connect directly.</summary>
+    internal UpstreamProxyEndpoint? ResolveUpstream(AppConfig c, BrookLink link)
+    {
+        switch (c.UpstreamProxy)
+        {
+            case UpstreamProxyMode.Manual:
+                return new UpstreamProxyEndpoint(c.UpstreamProxyHost.Trim(), c.UpstreamProxyPort, c.UpstreamProxyUsername, c.UpstreamProxyPassword);
+            case UpstreamProxyMode.System:
+                var found = UpstreamDetection.Detect(_proxy.UserSettings, link.DialHost, link.DialPort, c.HttpPort);
+                if (found is not { } f)
+                {
+                    Log.Write("upstream proxy: Windows has none for the server; connecting directly");
+                    return null;
+                }
+                return new UpstreamProxyEndpoint(f.Host, f.Port, c.UpstreamProxyUsername, c.UpstreamProxyPassword);
+            default:
+                return null;
+        }
+    }
+
+    /// <summary>What "use the Windows proxy" would pick right now, for the settings window.</summary>
+    internal string DescribeSystemProxy(int httpPort) => UpstreamDetection.Describe(_proxy.UserSettings, httpPort);
 
     private void Fail(Failure failure)
     {
+        _relayWatch?.Stop();
         var old = _session;
         _session = null;
         var retry = _wantConnected && failure.Retryable && _retries < RetryPolicy.MaxRetries && _pendingConfig is not null;
@@ -197,7 +241,7 @@ internal sealed class Engine
         _networkDebounce = new DispatcherTimer(TimeSpan.FromSeconds(2), DispatcherPriority.Normal, (_, _) =>
         {
             _networkDebounce?.Stop();
-            if (_session is not { } s) return;
+            if (_session is not { } s || s.Relay is not null) return; // the proxy resolves the server's name
             var gen = _generation;
             Task.Run(() =>
             {
@@ -226,14 +270,48 @@ internal sealed class Engine
         if (problems.Count > 0) throw new Failure(string.Join("; ", problems));
         var brookPath = AppPaths.Brook ?? throw new Failure("brook.exe not found next to BrookClient.exe");
 
-        var ips = Net.ResolveIPv4(link!.DialHost);
-        if (ips.Count == 0) throw Failure.Transient($"Cannot resolve {link.DialHost}");
-        var pinIP = ips[0];
-
         foreach (var port in new[] { config.SocksPort, config.HttpPort })
             if (Net.PortInUse(port)) throw new Failure($"Port {port} is already in use by another program");
 
-        var process = StartBrook(brookPath, BrookCommand.Arguments(link, pinIP, config));
+        // Through an HTTP proxy: brook dials a local relay, which tunnels to the server with CONNECT (with the login).
+        var upstream = ResolveUpstream(config, link!);
+        HttpConnectRelay? relay = null;
+        List<string> ips;
+        string pinIP;
+        IReadOnlyList<string> args;
+        if (upstream is not null)
+        {
+            if (link!.Kind == BrookLinkKind.QuicServer) throw new Failure("QUIC servers can't be reached through an HTTP proxy");
+            try
+            {
+                HttpConnectRelay.TestAsync(upstream, link.DialHost, link.DialPort, TimeSpan.FromSeconds(15)).GetAwaiter().GetResult();
+            }
+            catch (UpstreamProxyException e)
+            {
+                throw e.AuthenticationFailed ? new Failure(e.Message) : Failure.Transient(e.Message);
+            }
+            catch (OperationCanceledException)
+            {
+                throw Failure.Transient($"Proxy {upstream} did not answer");
+            }
+            relay = new HttpConnectRelay(upstream, link.DialHost, link.DialPort, Log.Write);
+            relay.Start();
+            Log.Write($"relay 127.0.0.1:{relay.Port} → proxy {upstream} → {link.DialHost}:{link.DialPort}");
+            ips = [];
+            pinIP = $"{link.DialHost}:{link.DialPort}";
+            args = BrookCommandRelay.Arguments(link, relay.Port, config);
+        }
+        else
+        {
+            ips = Net.ResolveIPv4(link!.DialHost);
+            if (ips.Count == 0) throw Failure.Transient($"Cannot resolve {link.DialHost}");
+            pinIP = ips[0];
+            args = BrookCommand.Arguments(link, pinIP, config);
+        }
+
+        Process process;
+        try { process = StartBrook(brookPath, args); }
+        catch { relay?.Dispose(); throw; }
         try
         {
             var deadline = DateTime.UtcNow.AddSeconds(8);
@@ -254,11 +332,12 @@ internal sealed class Engine
             {
                 RestoreProxy(); // switched from "set Windows proxy" to "local proxies only"
             }
-            return new Session(config, process, ips, pinIP, proxyApplied);
+            return new Session(config, process, ips, pinIP, proxyApplied, relay, upstream);
         }
         catch
         {
             Kill(process);
+            relay?.Dispose();
             throw;
         }
     }
@@ -312,7 +391,11 @@ internal sealed class Engine
     {
         // Proxy first, so apps never point at a proxy that is gone.
         if (restoreProxy) RestoreProxy();
-        if (s is not null) Kill(s.Process);
+        if (s is not null)
+        {
+            Kill(s.Process);
+            s.Relay?.Dispose();
+        }
     }
 
     private void RestoreProxy()

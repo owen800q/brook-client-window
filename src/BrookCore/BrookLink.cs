@@ -125,6 +125,37 @@ public sealed class BrookLink : IEquatable<BrookLink>
         return changed ? $"brook://{KindName}?" + EncodeQuery(items) : Raw;
     }
 
+    /// <summary>
+    /// A link that makes brook dial a local relay (127.0.0.1:<paramref name="relayPort"/>) instead of the server, for
+    /// reaching the server through an HTTP proxy. ws/wss keep the server name in the URL for TLS SNI and the Host header.
+    /// UDP is always carried inside the stream, since an HTTP proxy only passes TCP. QUIC (UDP) can't be relayed.
+    /// </summary>
+    public string ThroughRelay(int relayPort)
+    {
+        var items = new List<KeyValuePair<string, string>>(_query);
+        void Set(string key, string value)
+        {
+            var i = items.FindIndex(kv => kv.Key == key);
+            if (i >= 0) items[i] = new(key, value); else items.Add(new(key, value));
+        }
+        var local = $"127.0.0.1:{relayPort}";
+        switch (Kind)
+        {
+            case BrookLinkKind.Server:
+                Set("server", local);
+                Set("udpovertcp", "true");
+                break;
+            case BrookLinkKind.WsServer:
+            case BrookLinkKind.WssServer:
+                if (_serverValueWithPort is { } v) Set(KindName, v);
+                Set("address", local);
+                break;
+            default:
+                throw new BrookLinkException($"{KindName} links can't go through an HTTP proxy");
+        }
+        return $"brook://{KindName}?" + EncodeQuery(items);
+    }
+
     public bool Equals(BrookLink? other) => other is not null && other.Raw == Raw;
     public override bool Equals(object? obj) => Equals(obj as BrookLink);
     public override int GetHashCode() => Raw.GetHashCode(StringComparison.Ordinal);

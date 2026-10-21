@@ -24,7 +24,14 @@ jobs:
           dotnet-version: 8.0.x
       - name: Build everything (cross-targeting Windows)
         run: dotnet build BrookClient.sln -c Release
+      - name: Fetch brook (Linux, for the proxy relay test)
+        run: |
+          mkdir -p vendor
+          curl -fsSL -o vendor/brook-linux https://github.com/txthinking/brook/releases/download/v20270101/brook_linux_amd64
+          chmod +x vendor/brook-linux
       - name: Core tests
+        env:
+          BROOK_BIN: ${{ github.workspace }}/vendor/brook-linux
         run: dotnet test tests/BrookCore.Tests -c Release --no-build
 
   windows:
@@ -49,6 +56,8 @@ jobs:
         run: dotnet build BrookClient.sln -c Release
 
       - name: Core tests
+        env:
+          BROOK_BIN: ${{ github.workspace }}/vendor/brook.exe
         run: dotnet test tests/BrookCore.Tests -c Release --no-build
 
       # UI snapshots, the real exe, and a live connection through a local brook server with the

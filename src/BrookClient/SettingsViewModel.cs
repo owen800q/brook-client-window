@@ -56,6 +56,11 @@ public sealed class SettingsViewModel : Observable
     private bool _connectOnLaunch;
     private bool _udpOverTcp;
     private bool _setSystemProxy;
+    private UpstreamProxyMode _upstreamMode;
+    private string _upstreamHost = "";
+    private string _upstreamPort = "";
+    private string _upstreamUsername = "";
+    private string _upstreamPassword = "";
     private List<string> _errors = [];
     private bool _isDirty;
     private bool _loading;
@@ -76,6 +81,32 @@ public sealed class SettingsViewModel : Observable
     public bool UdpOverTcp { get => _udpOverTcp; set { if (Set(ref _udpOverTcp, value)) Changed(); } }
     public bool SetSystemProxy { get => _setSystemProxy; set { if (Set(ref _setSystemProxy, value)) Changed(); } }
 
+    public UpstreamProxyMode UpstreamMode
+    {
+        get => _upstreamMode;
+        set
+        {
+            if (!Set(ref _upstreamMode, value)) return;
+            Raise(nameof(IsUpstreamOff));
+            Raise(nameof(IsUpstreamSystem));
+            Raise(nameof(IsUpstreamManual));
+            Raise(nameof(IsUpstreamOn));
+            Changed();
+        }
+    }
+
+    // One bool per radio button.
+    public bool IsUpstreamOff { get => _upstreamMode == UpstreamProxyMode.Off; set { if (value) UpstreamMode = UpstreamProxyMode.Off; } }
+    public bool IsUpstreamSystem { get => _upstreamMode == UpstreamProxyMode.System; set { if (value) UpstreamMode = UpstreamProxyMode.System; } }
+    public bool IsUpstreamManual { get => _upstreamMode == UpstreamProxyMode.Manual; set { if (value) UpstreamMode = UpstreamProxyMode.Manual; } }
+    public bool IsUpstreamOn => _upstreamMode != UpstreamProxyMode.Off;
+
+    public string UpstreamHost { get => _upstreamHost; set { if (Set(ref _upstreamHost, value)) Changed(); } }
+    public string UpstreamPort { get => _upstreamPort; set { if (Set(ref _upstreamPort, value)) Changed(); } }
+    public string UpstreamUsername { get => _upstreamUsername; set { if (Set(ref _upstreamUsername, value)) Changed(); } }
+    /// <summary>Set from the PasswordBox in code (PasswordBox.Password can't be bound).</summary>
+    public string UpstreamPassword { get => _upstreamPassword; set { if (Set(ref _upstreamPassword, value)) Changed(); } }
+
     public IReadOnlyList<string> Errors => _errors;
     public string? FirstError => _errors.Count == 0 ? null : _errors.Count == 1 ? _errors[0] : $"{_errors[0]} (+{_errors.Count - 1} more)";
     public bool HasErrors => _errors.Count > 0;
@@ -95,6 +126,11 @@ public sealed class SettingsViewModel : Observable
         ConnectOnLaunch = c.ConnectOnLaunch;
         UdpOverTcp = c.UdpOverTcp;
         SetSystemProxy = c.SetSystemProxy;
+        UpstreamMode = c.UpstreamProxy;
+        UpstreamHost = c.UpstreamProxyHost;
+        UpstreamPort = c.UpstreamProxyPort.ToString();
+        UpstreamUsername = c.UpstreamProxyUsername;
+        UpstreamPassword = c.UpstreamProxyPassword;
         _loading = false;
         Changed();
     }
@@ -110,6 +146,11 @@ public sealed class SettingsViewModel : Observable
             ConnectOnLaunch = ConnectOnLaunch,
             UdpOverTcp = UdpOverTcp,
             SetSystemProxy = SetSystemProxy,
+            UpstreamProxy = UpstreamMode,
+            UpstreamProxyHost = UpstreamHost.Trim(),
+            UpstreamProxyPort = ParsePort(UpstreamPort),
+            UpstreamProxyUsername = UpstreamUsername.Trim(),
+            UpstreamProxyPassword = UpstreamPassword,
         };
         var selected = Profiles.ToList().FindIndex(p => p.IsSelected);
         c.SelectedIndex = selected >= 0 ? selected : c.Profiles.Count > 0 ? 0 : null;
@@ -155,10 +196,13 @@ public sealed class SettingsViewModel : Observable
         var errors = new List<string>();
         if (!IsNumber(SocksPort)) errors.Add($"SOCKS5 port '{SocksPort}' is not a number");
         if (!IsNumber(HttpPort)) errors.Add($"HTTP port '{HttpPort}' is not a number");
+        var upstreamPortBad = UpstreamMode == UpstreamProxyMode.Manual && !IsNumber(UpstreamPort);
+        if (upstreamPortBad) errors.Add($"Proxy port '{UpstreamPort}' is not a number");
         // Unparsable ports are already reported above.
         errors.AddRange(c.ValidationErrors().Where(e =>
             !(e == "SOCKS5 port 0 is out of range" && !IsNumber(SocksPort)) && !(e == "HTTP port 0 is out of range" && !IsNumber(HttpPort))
-            && !(e.Contains("must differ") && (!IsNumber(SocksPort) || !IsNumber(HttpPort)))));
+            && !(e.Contains("must differ") && (!IsNumber(SocksPort) || !IsNumber(HttpPort)))
+            && !(e == "Proxy port 0 is out of range" && upstreamPortBad)));
         _errors = errors;
         IsDirty = !c.Equals(_saved);
         Raise(nameof(Errors));

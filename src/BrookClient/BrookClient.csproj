@@ -47,6 +47,8 @@
 
   <ItemGroup>
     <PackageReference Include="Retro.NET" Version="1.0.11" />
+    <!-- DPAPI: encrypts the proxy password for the current Windows user. -->
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
   </ItemGroup>
 
   <ItemGroup>

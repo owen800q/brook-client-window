@@ -33,6 +33,7 @@ public partial class App : Application
         if (args.Length == 2 && args[0] == "--watchdog" && int.TryParse(args[1], out var pid))
             return Watchdog.Run(pid);
 
+        ConfigStore.DefaultProtector = new DpapiSecretProtector();
         var app = new App();
         app.InitializeComponent();
         // Wired here rather than in OnStartup, so hosting App elsewhere (the Windows tests) never runs the real startup.

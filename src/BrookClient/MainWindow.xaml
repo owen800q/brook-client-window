@@ -158,6 +158,42 @@
                              Text="Command-line tools (such as sdb, adb or git) usually ignore the Windows proxy and always connect directly, so they keep reaching your LAN." />
                 </StackPanel>
               </GroupBox>
+              <GroupBox Header="Reach the server through an HTTP proxy" Margin="0,8,0,0">
+                <StackPanel Margin="4">
+                  <TextBlock Style="{StaticResource Caption}"
+                             Text="For networks (office, school, hotel) where the internet is only reachable through an HTTP proxy. Brook's connection to your server goes through it; UDP is carried over TCP. QUIC servers can't be used this way." />
+                  <RadioButton GroupName="Upstream" Content="Connect to the server directly" IsChecked="{Binding IsUpstreamOff}" />
+                  <RadioButton GroupName="Upstream" Margin="0,4,0,0" IsChecked="{Binding IsUpstreamSystem}">
+                    <TextBlock>
+                      <Run Text="Use the Windows proxy" />
+                      <Run x:Name="DetectedProxy" Foreground="{DynamicResource Retro.ForegroundMuted}" Text="" />
+                    </TextBlock>
+                  </RadioButton>
+                  <RadioButton GroupName="Upstream" Content="Use this proxy:" Margin="0,4,0,0" IsChecked="{Binding IsUpstreamManual}" />
+                  <StackPanel Margin="20,4,0,0" IsEnabled="{Binding IsUpstreamManual}">
+                    <retro:FormField Label="Host" LabelWidth="90">
+                      <TextBox x:Name="UpstreamHostBox" Text="{Binding UpstreamHost, UpdateSourceTrigger=PropertyChanged}"
+                               retro:Assist.Placeholder="proxy.company.com" />
+                    </retro:FormField>
+                    <retro:FormField Label="Port" LabelWidth="90">
+                      <TextBox Text="{Binding UpstreamPort, UpdateSourceTrigger=PropertyChanged}" Width="80" HorizontalAlignment="Left" />
+                    </retro:FormField>
+                  </StackPanel>
+                  <StackPanel Margin="20,6,0,0" IsEnabled="{Binding IsUpstreamOn}">
+                    <retro:FormField Label="Username" LabelWidth="90" HelpText="Leave empty if the proxy needs no login.">
+                      <TextBox x:Name="UpstreamUserBox" Text="{Binding UpstreamUsername, UpdateSourceTrigger=PropertyChanged}" />
+                    </retro:FormField>
+                    <retro:FormField Label="Password" LabelWidth="90" HelpText="Stored encrypted for your Windows account.">
+                      <PasswordBox x:Name="UpstreamPasswordBox" PasswordChanged="UpstreamPassword_Changed" />
+                    </retro:FormField>
+                    <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                      <Button x:Name="TestProxyButton" retro:Assist.Icon="Check" Content="Test Proxy" Click="TestProxy_Click"
+                              ToolTip="Opens a connection to the selected server through the proxy, with this login" />
+                      <TextBlock x:Name="ProxyTestResult" VerticalAlignment="Center" Margin="8,0,0,0" TextWrapping="Wrap" MaxWidth="380" />
+                    </StackPanel>
+                  </StackPanel>
+                </StackPanel>
+              </GroupBox>
               <GroupBox Header="Local proxies" Margin="0,8,0,0">
                 <StackPanel Margin="4">
                   <retro:FormField Label="SOCKS5 port" LabelWidth="110" HelpText="127.0.0.1 only; for apps you configure by hand.">

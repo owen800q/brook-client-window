@@ -24,6 +24,12 @@ public partial class MainWindow : RetroWindow
         ConfigPath.Text = ConfigStore.Standard.Path;
         LogPath.Text = Paths.BrookLog;
         LaunchAtLogin.IsChecked = SafeIsLoginItem();
+        SyncPasswordBox();
+        _model.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(SettingsViewModel.UpstreamPassword)) SyncPasswordBox();
+        };
+        RefreshDetectedProxy();
         if (_app.Config.Profiles.Count == 0) Tabs.SelectedIndex = 0;
 
         _app.Engine.StateChanged += OnStateChanged;
@@ -153,6 +159,83 @@ public partial class MainWindow : RetroWindow
     {
         try { return LoginItem.IsEnabled; }
         catch (Exception ex) when (ex is UnauthorizedAccessException or System.Security.SecurityException or IOException) { return false; }
+    }
+
+    // ---- Upstream HTTP proxy ----------------------------------------------------------------
+
+    private void UpstreamPassword_Changed(object sender, RoutedEventArgs e) => _model.UpstreamPassword = UpstreamPasswordBox.Password;
+
+    /// <summary>Puts the model's password into the box after Load/Revert (PasswordBox can't be bound).</summary>
+    private void SyncPasswordBox()
+    {
+        if (UpstreamPasswordBox.Password != _model.UpstreamPassword) UpstreamPasswordBox.Password = _model.UpstreamPassword;
+    }
+
+    private void RefreshDetectedProxy()
+    {
+        var httpPort = _app.Config.HttpPort;
+        var engine = _app.Engine;
+        Task.Run(() => engine.DescribeSystemProxy(httpPort)).ContinueWith(t =>
+        {
+            DetectedProxy.Text = t.IsCompletedSuccessfully ? $"(detected: {t.Result})" : "";
+        }, TaskScheduler.FromCurrentSynchronizationContext());
+    }
+
+    private async void TestProxy_Click(object sender, RoutedEventArgs e)
+    {
+        var config = _model.ToConfig();
+        if (config.SelectedProfile is not { } profile || !BrookLink.TryParse(profile.Link, out var link))
+        {
+            ShowProxyTest(false, "Select a server with a valid link first.");
+            return;
+        }
+        var problems = config.ValidationErrors().Where(p => p.StartsWith("Proxy", StringComparison.Ordinal)).ToList();
+        if (problems.Count > 0) { ShowProxyTest(false, problems[0]); return; }
+
+        TestProxyButton.IsEnabled = false;
+        ShowProxyTest(null, "Testing…");
+        try
+        {
+            var engine = _app.Engine;
+            var upstream = await Task.Run(() => engine.ResolveUpstream(config, link!));
+            if (upstream is null)
+            {
+                ShowProxyTest(config.UpstreamProxy == UpstreamProxyMode.System ? null : false,
+                    config.UpstreamProxy == UpstreamProxyMode.System
+                        ? "Windows has no proxy for this server, so Brook will connect directly."
+                        : "No proxy selected.");
+                return;
+            }
+            await HttpConnectRelay.TestAsync(upstream, link!.DialHost, link.DialPort, TimeSpan.FromSeconds(15));
+            ShowProxyTest(true, $"OK: {upstream} {(upstream.HasLogin ? "accepted the login and " : "")}reached {link.DialHost}:{link.DialPort}.");
+        }
+        catch (UpstreamProxyException ex)
+        {
+            ShowProxyTest(false, ex.Message);
+        }
+        catch (OperationCanceledException)
+        {
+            ShowProxyTest(false, "The proxy did not answer within 15 seconds.");
+        }
+        catch (Exception ex)
+        {
+            ShowProxyTest(false, ex.Message);
+        }
+        finally
+        {
+            TestProxyButton.IsEnabled = true;
+        }
+    }
+
+    private void ShowProxyTest(bool? ok, string text)
+    {
+        ProxyTestResult.Text = text;
+        ProxyTestResult.Foreground = ok switch
+        {
+            true => (System.Windows.Media.Brush)FindResource("Retro.StatusSuccess"),
+            false => (System.Windows.Media.Brush)FindResource("Retro.StatusError"),
+            _ => (System.Windows.Media.Brush)FindResource("Retro.Foreground"),
+        };
     }
 
     // ---- Menu --------------------------------------------------------------------------------

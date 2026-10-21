@@ -3,6 +3,18 @@ using System.Text.Json.Serialization;
 
 namespace BrookClient.Core;
 
+/// <summary>How brook reaches the Brook server: directly, or through an HTTP proxy (CONNECT).</summary>
+[JsonConverter(typeof(JsonStringEnumConverter<UpstreamProxyMode>))]
+public enum UpstreamProxyMode
+{
+    /// <summary>Connect to the server directly.</summary>
+    Off,
+    /// <summary>Use the proxy Windows had before we connected (manual server or PAC script); direct if none.</summary>
+    System,
+    /// <summary>Use <see cref="AppConfig.UpstreamProxyHost"/>:<see cref="AppConfig.UpstreamProxyPort"/>.</summary>
+    Manual,
+}
+
 public sealed record Profile(string Name, string Link)
 {
     public string Name { get; set; } = Name;
@@ -31,6 +43,20 @@ public sealed class AppConfig : IEquatable<AppConfig>
     /// <summary>Point the Windows (per-user) proxy settings at brook while connected. Off = only run the local proxies.</summary>
     public bool SetSystemProxy { get; set; } = true;
 
+    /// <summary>For networks where the internet is only reachable through an HTTP proxy.</summary>
+    public UpstreamProxyMode UpstreamProxy { get; set; } = UpstreamProxyMode.Off;
+    public string UpstreamProxyHost { get; set; } = "";
+    public int UpstreamProxyPort { get; set; } = 8080;
+    /// <summary>Basic authentication; empty = the proxy needs no login.</summary>
+    public string UpstreamProxyUsername { get; set; } = "";
+    /// <summary>Never written as plain text: <see cref="ConfigStore"/> stores it encrypted as <c>upstreamProxyPasswordData</c>.</summary>
+    [JsonIgnore]
+    public string UpstreamProxyPassword { get; set; } = "";
+    /// <summary>The encrypted password, as stored on disk. Managed by <see cref="ConfigStore"/>.</summary>
+    [JsonInclude]
+    [JsonPropertyName("upstreamProxyPasswordData")]
+    internal string? UpstreamProxyPasswordData { get; set; }
+
     [JsonIgnore]
     public Profile? SelectedProfile =>
         SelectedIndex is { } i && i >= 0 && i < Profiles.Count ? Profiles[i] : null;
@@ -55,22 +81,64 @@ public sealed class AppConfig : IEquatable<AppConfig>
         foreach (var (label, port) in new[] { ("SOCKS5", SocksPort), ("HTTP", HttpPort) })
             if (port is < 1 or > 65535) errors.Add($"{label} port {port} is out of range");
         if (SocksPort == HttpPort) errors.Add("SOCKS5 and HTTP ports must differ");
+        if (UpstreamProxy == UpstreamProxyMode.Manual)
+        {
+            if (!UpstreamProxyEndpoint.IsValidHost(UpstreamProxyHost.Trim())) errors.Add("Proxy: enter the proxy's host name or IP address");
+            if (UpstreamProxyPort is < 1 or > 65535) errors.Add($"Proxy port {UpstreamProxyPort} is out of range");
+        }
+        if (UpstreamProxy != UpstreamProxyMode.Off && UpstreamProxyUsername.Contains(':'))
+            errors.Add("Proxy: the username can't contain ':'");
+        if (UpstreamProxy != UpstreamProxyMode.Off && SelectedProfile is { } sel && BrookLink.TryParse(sel.Link, out var selLink)
+            && selLink!.Kind == BrookLinkKind.QuicServer)
+            errors.Add($"Server '{sel.Name}': QUIC servers can't be reached through an HTTP proxy (it only carries TCP)");
         return errors;
     }
 
-    public AppConfig Clone() => JsonSerializer.Deserialize<AppConfig>(JsonSerializer.Serialize(this, ConfigStore.JsonOptions), ConfigStore.JsonOptions)!;
+    public AppConfig Clone()
+    {
+        var c = JsonSerializer.Deserialize<AppConfig>(JsonSerializer.Serialize(this, ConfigStore.JsonOptions), ConfigStore.JsonOptions)!;
+        c.UpstreamProxyPassword = UpstreamProxyPassword; // not serialized
+        return c;
+    }
 
     public bool Equals(AppConfig? o) =>
         o is not null && Profiles.SequenceEqual(o.Profiles) && SelectedIndex == o.SelectedIndex && BypassCidrs.SequenceEqual(o.BypassCidrs)
         && SocksPort == o.SocksPort && HttpPort == o.HttpPort && ConnectOnLaunch == o.ConnectOnLaunch && UdpOverTcp == o.UdpOverTcp
-        && SetSystemProxy == o.SetSystemProxy;
+        && SetSystemProxy == o.SetSystemProxy && UpstreamProxy == o.UpstreamProxy && UpstreamProxyHost == o.UpstreamProxyHost
+        && UpstreamProxyPort == o.UpstreamProxyPort && UpstreamProxyUsername == o.UpstreamProxyUsername
+        && UpstreamProxyPassword == o.UpstreamProxyPassword;
 
     public override bool Equals(object? obj) => Equals(obj as AppConfig);
     public override int GetHashCode() => HashCode.Combine(Profiles.Count, SelectedIndex, SocksPort, HttpPort);
 }
 
-public sealed class ConfigStore(string path)
+/// <summary>Encrypts secrets at rest. The app uses Windows DPAPI (current user); tests and other OSes use <see cref="Plain"/>.</summary>
+public interface ISecretProtector
 {
+    string Protect(string secret);
+    /// <summary>Returns null when the data can't be decrypted (e.g. copied from another user or PC).</summary>
+    string? Unprotect(string data);
+}
+
+public sealed class PlainSecretProtector : ISecretProtector
+{
+    public static readonly PlainSecretProtector Instance = new();
+    private const string Prefix = "plain:";
+
+    public string Protect(string secret) => Prefix + Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(secret));
+
+    public string? Unprotect(string data)
+    {
+        if (!data.StartsWith(Prefix, StringComparison.Ordinal)) return null;
+        try { return System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(data[Prefix.Length..])); }
+        catch (FormatException) { return null; }
+    }
+}
+
+public sealed class ConfigStore(string path, ISecretProtector? protector = null)
+{
+    private readonly ISecretProtector _protector = protector ?? PlainSecretProtector.Instance;
+
     internal static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -80,7 +148,10 @@ public sealed class ConfigStore(string path)
     public string Path { get; } = path;
 
     /// <summary><c>%APPDATA%\BrookClient\config.json</c>: per-user and private to the user by default ACLs.</summary>
-    public static ConfigStore Standard => new(System.IO.Path.Combine(Paths.AppData, "config.json"));
+    public static ConfigStore Standard => new(System.IO.Path.Combine(Paths.AppData, "config.json"), DefaultProtector);
+
+    /// <summary>Set by the app at startup (DPAPI on Windows).</summary>
+    public static ISecretProtector? DefaultProtector { get; set; }
 
     public AppConfig Load()
     {
@@ -89,6 +160,10 @@ public sealed class ConfigStore(string path)
         // Explicit nulls in hand-edited files would otherwise crash later.
         c.Profiles ??= [];
         c.BypassCidrs ??= [.. AppConfig.DefaultBypass];
+        c.UpstreamProxyHost ??= "";
+        c.UpstreamProxyUsername ??= "";
+        c.UpstreamProxyPassword = c.UpstreamProxyPasswordData is { Length: > 0 } data ? _protector.Unprotect(data) ?? "" : "";
+        c.UpstreamProxyPasswordData = null;
         return c;
     }
 
@@ -96,7 +171,9 @@ public sealed class ConfigStore(string path)
     {
         Directory.CreateDirectory(System.IO.Path.GetDirectoryName(Path)!);
         var tmp = Path + ".tmp";
-        File.WriteAllText(tmp, JsonSerializer.Serialize(config, JsonOptions));
+        config.UpstreamProxyPasswordData = config.UpstreamProxyPassword.Length > 0 ? _protector.Protect(config.UpstreamProxyPassword) : null;
+        try { File.WriteAllText(tmp, JsonSerializer.Serialize(config, JsonOptions)); }
+        finally { config.UpstreamProxyPasswordData = null; }
         if (!OperatingSystem.IsWindows()) File.SetUnixFileMode(tmp, UnixFileMode.UserRead | UnixFileMode.UserWrite); // links contain passwords
         File.Move(tmp, Path, overwrite: true);
     }

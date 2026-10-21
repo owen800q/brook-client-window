@@ -12,6 +12,18 @@ public static class BrookCommand
     ];
 }
 
+public static class BrookCommandRelay
+{
+    /// <summary><c>brook connect</c> arguments when the server is reached through a local relay to an HTTP proxy.</summary>
+    public static IReadOnlyList<string> Arguments(BrookLink link, int relayPort, AppConfig config) =>
+    [
+        "connect",
+        "--link", link.ThroughRelay(relayPort),
+        "--socks5", $"127.0.0.1:{config.SocksPort}",
+        "--http", $"127.0.0.1:{config.HttpPort}",
+    ];
+}
+
 public static class RetryPolicy
 {
     public const int MaxRetries = 5;

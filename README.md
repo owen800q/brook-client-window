@@ -49,9 +49,22 @@ Closing the window keeps Brook Client running in the notification area. Left-cli
 
 Settings:
 - **Servers**: name and link per server; ● picks the one used for Connect. Supported link kinds: `server`, `wsserver`, `wssserver`, `quicserver`. (`socks5` links can't be used with `brook connect`.)
-- **Connection**: set the Windows proxy (on by default) or only run the local proxies; SOCKS5/HTTP ports; UDP over TCP (needed when your server's firewall blocks UDP).
+- **Connection**: set the Windows proxy (on by default) or only run the local proxies; reach the server through an HTTP proxy (see below); SOCKS5/HTTP ports; UDP over TCP (needed when your server's firewall blocks UDP).
 - **Bypass**: IPv4 addresses/CIDRs that always go direct. Windows matches them against the address typed in an app, so `http://192.168.0.10` is direct, and names without a dot (`http://nas`) are always direct.
 - **General**: connect on start, start at sign-in (your own `HKCU\...\Run` entry, which starts hidden in the notification area), and file locations.
+
+### Networks that need an HTTP proxy
+
+At an office, school or hotel the internet is sometimes only reachable through an HTTP proxy, often one with a login. Choose one of these under **Connection → Reach the server through an HTTP proxy**:
+
+- **Use the Windows proxy**: the proxy Windows had before you connected, either a manual proxy server or one from a PAC (auto-config) script. If Windows has none for your server, Brook connects directly.
+- **Use this proxy**: enter the host and port yourself.
+
+Enter the **username** and **password** if the proxy needs a login (Basic authentication). The password is encrypted for your Windows account with DPAPI and is never written in plain text. **Test Proxy** checks the proxy, the login and that the proxy lets you reach your server.
+
+How it works: Brook Client runs a small relay on `127.0.0.1`, and brook connects to it instead of to the server. The relay opens each connection to your server through the proxy with `CONNECT`. The proxy resolves the server's name, so this also works where only the proxy has DNS. While you are connected, your apps go to brook as usual. When you disconnect, your original Windows proxy is restored.
+
+Limits: `quicserver` links can't be used, because QUIC is UDP and an HTTP proxy only carries TCP. UDP for `server` links is always carried over TCP. Proxies that require Windows sign-in (NTLM/Kerberos) instead of a username and password are not supported. If the proxy rejects the login, Brook Client stops and tells you instead of retrying.
 
 Brook Client also auto-reconnects if brook exits, with back-off, and when the server's domain starts resolving to a different address.
 
@@ -59,7 +72,7 @@ Brook Client also auto-reconnects if brook exits, with back-off, and when the se
 
 | What | Where |
 |---|---|
-| Settings (contains your links/passwords) | `%APPDATA%\BrookClient\config.json` (same format as the macOS client's, so you can copy it over) |
+| Settings (contains your links; the proxy password is DPAPI-encrypted) | `%APPDATA%\BrookClient\config.json` (same format as the macOS client's, so you can copy it over) |
 | brook output | `%LOCALAPPDATA%\BrookClient\brook.log` |
 | Client diagnostics | `%LOCALAPPDATA%\BrookClient\client.log` |
 | Saved proxy settings while connected | `%LOCALAPPDATA%\BrookClient\proxy-backup.json` |

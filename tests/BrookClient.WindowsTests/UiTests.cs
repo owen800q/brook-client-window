@@ -119,6 +119,56 @@ public sealed class UiTests(UiThread ui)
         w.Close();
     }
 
+    [Fact]
+    public void ProxySettingsRoundTripThroughTheWindowAndAreEncrypted()
+    {
+        ui.Invoke(() =>
+        {
+            ui.App.InitializeForTests(SampleConfig(), new SystemProxy(new FakeStore(), Path.Combine(ui.DataDir, "ui-backup.json")));
+            var w = new MainWindow { Width = 660, Height = 620, Left = 0, Top = 0, ShowActivated = false };
+            w.Show();
+            try
+            {
+                var model = (SettingsViewModel)w.DataContext;
+                model.IsUpstreamManual = true;
+                model.UpstreamHost = "proxy.corp";
+                model.UpstreamPort = "3128";
+                model.UpstreamUsername = "alice";
+                ((PasswordBox)w.FindName("UpstreamPasswordBox")).Password = "s3cret";
+                model.Profiles[2].Link = "brook://server?password=x&server=1.2.3.4%3A1"; // fix the broken sample
+                var c = model.ToConfig();
+                Assert.Equal(UpstreamProxyMode.Manual, c.UpstreamProxy);
+                Assert.Equal(3128, c.UpstreamProxyPort);
+                Assert.Equal("s3cret", c.UpstreamProxyPassword);
+                Assert.Empty(model.Errors);
+
+                var tabs = (TabControl)w.FindName("Tabs");
+                tabs.SelectedIndex = 1;
+                w.UpdateLayout();
+                Save(w, "main-proxy-manual.png");
+
+                model.UpstreamPort = "abc";
+                Assert.Contains(model.Errors, e => e.Contains("Proxy port 'abc'"));
+
+                // Saved with DPAPI: the file never holds the password in plain text, and it loads back.
+                var store = new ConfigStore(Path.Combine(ui.DataDir, "dpapi-config.json"), new Platform.DpapiSecretProtector());
+                store.Save(c);
+                var json = File.ReadAllText(store.Path);
+                Assert.DoesNotContain("s3cret", json);
+                Assert.Contains("\"upstreamProxyPasswordData\": \"dpapi:", json);
+                Assert.Equal("s3cret", store.Load().UpstreamProxyPassword);
+
+                // Revert puts the saved (empty) password back into the box.
+                model.Load(ui.App.Config);
+                Assert.Equal("", ((PasswordBox)w.FindName("UpstreamPasswordBox")).Password);
+            }
+            finally
+            {
+                CloseDiscarding(w);
+            }
+        });
+    }
+
     /// <summary>Opens the real tray menu and clicks its items: switch server (saved to disk), connect, disconnect.</summary>
     [Fact]
     public void TrayMenuOpensAndItsItemsWork()
