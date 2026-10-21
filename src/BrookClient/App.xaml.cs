@@ -35,12 +35,13 @@ public partial class App : Application
 
         var app = new App();
         app.InitializeComponent();
+        // Wired here rather than in OnStartup, so hosting App elsewhere (the Windows tests) never runs the real startup.
+        app.Startup += (_, e) => app.StartUp(e);
         return app.Run();
     }
 
-    protected override void OnStartup(StartupEventArgs e)
+    private void StartUp(StartupEventArgs e)
     {
-        base.OnStartup(e);
         Log.Write($"starting {typeof(App).Assembly.GetName().Version} (pid {Environment.ProcessId}, args: {string.Join(" ", e.Args)})");
 
         _instanceMutex = new Mutex(true, InstanceMutexName, out var first);
