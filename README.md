@@ -6,6 +6,8 @@ A lightweight Windows notification-area client for [Brook](https://github.com/tx
 
 **It runs without administrator rights.** There is no installer, driver, service or UAC prompt. Everything it changes belongs to your own user account.
 
+<p align="center"><img src="docs/screenshot-servers.png" width="49%" alt="Servers tab"> <img src="docs/screenshot-connection.png" width="49%" alt="Connection tab"></p>
+
 ## How it works
 
 | Destination | Route |
