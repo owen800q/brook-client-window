@@ -119,6 +119,42 @@ public sealed class UiTests(UiThread ui)
         w.Close();
     }
 
+    /// <summary>Opens the real tray menu and clicks its items: switch server (saved to disk), connect, disconnect.</summary>
+    [Fact]
+    public void TrayMenuOpensAndItsItemsWork()
+    {
+        ui.Invoke(() =>
+        {
+            var config = SampleConfig();
+            config.Profiles[2] = new Profile("Local", "brook://server?password=pw&server=127.0.0.1%3A1"); // valid, unreachable
+            ui.App.InitializeForTests(config, new SystemProxy(new FakeStore(), Path.Combine(ui.DataDir, "tray-backup.json")));
+            using var tray = new TrayIcon(ui.App);
+            tray.ShowMenu();
+            Assert.True(tray.Menu.IsOpen);
+            var root = tray.Menu.Items.OfType<MenuItem>().ToList();
+
+            // Pick the second server from the Server submenu.
+            var servers = root.Single(m => (string)m.Header == "_Server");
+            ((MenuItem)servers.Items[1]).RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+            Assert.Equal(1, ui.App.Config.SelectedIndex);
+            Assert.Equal(1, ConfigStore.Standard.Load().SelectedIndex);
+            tray.Menu.IsOpen = false;
+
+            // Connect from the menu, then the rebuilt menu offers Disconnect.
+            tray.ShowMenu();
+            root = tray.Menu.Items.OfType<MenuItem>().ToList();
+            root.Single(m => (string)m.Header == "_Connect").RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+            Assert.True(ui.App.Engine.IsActive);
+            tray.Menu.IsOpen = false;
+            tray.ShowMenu();
+            root = tray.Menu.Items.OfType<MenuItem>().ToList();
+            Assert.StartsWith("Connecting", (string)root[0].Header);
+            root.Single(m => (string)m.Header == "_Disconnect").RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+            Assert.IsType<EngineState.Disconnected>(ui.App.Engine.State);
+            tray.Menu.IsOpen = false;
+        });
+    }
+
     private static Button FindButton(DependencyObject root, string content)
     {
         foreach (var b in Descendants<Button>(root))

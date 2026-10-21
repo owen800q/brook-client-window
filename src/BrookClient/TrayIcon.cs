@@ -51,7 +51,7 @@ internal sealed class TrayIcon : IDisposable
         _icon.ShowBalloonTip(4000, "Brook Client is still running",
             "It stays in the notification area. Right-click the shield icon to connect, disconnect or quit.", Forms.ToolTipIcon.Info);
 
-    private void ShowMenu()
+    internal void ShowMenu()
     {
         Rebuild();
         _menu.Placement = PlacementMode.MousePoint;
