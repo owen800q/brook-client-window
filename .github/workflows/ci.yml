@@ -56,7 +56,9 @@ jobs:
       - name: Windows tests
         env:
           SNAPSHOT_DIR: ${{ github.workspace }}/build/snapshots
-        run: dotnet test tests/BrookClient.WindowsTests -c Release --no-build --logger "console;verbosity=normal"
+        timeout-minutes: 10
+        # A stuck test (e.g. a modal dialog) fails after 3 minutes instead of hanging the job.
+        run: dotnet test tests/BrookClient.WindowsTests -c Release --no-build --logger "console;verbosity=normal" --blame-hang-timeout 3m
 
       - name: Upload UI snapshots
         if: always()

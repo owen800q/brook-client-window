@@ -168,7 +168,11 @@ public partial class App : Application
 
     internal void Quit()
     {
-        _window?.Close();
+        if (_window is not null)
+        {
+            _window.Close(); // may ask to save unsaved settings
+            if (_window is not null) return; // the user chose Cancel: keep running
+        }
         Engine.ShutdownSync();
         _tray?.Dispose();
         _tray = null;

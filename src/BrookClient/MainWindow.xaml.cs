@@ -162,10 +162,7 @@ public partial class MainWindow : RetroWindow
     private void OpenFolder_Click(object sender, RoutedEventArgs e) => App.OpenFolder(Paths.AppData);
     private void CloseWindow_Click(object sender, RoutedEventArgs e) => Close();
 
-    private void Exit_Click(object sender, RoutedEventArgs e)
-    {
-        if (ConfirmDiscard()) _app.Quit();
-    }
+    private void Exit_Click(object sender, RoutedEventArgs e) => _app.Quit(); // closing asks about unsaved changes
 
     private void About_Click(object sender, RoutedEventArgs e)
     {

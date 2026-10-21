@@ -58,7 +58,7 @@ public sealed class UiTests(UiThread ui)
             }
             finally
             {
-                w.Close();
+                CloseDiscarding(w);
             }
         });
     }
@@ -89,7 +89,7 @@ public sealed class UiTests(UiThread ui)
             }
             finally
             {
-                w.Close();
+                CloseDiscarding(w);
             }
         });
     }
@@ -110,6 +110,13 @@ public sealed class UiTests(UiThread ui)
             Assert.Equal(3, servers.Items.Count);
             Assert.True(((MenuItem)servers.Items[0]).IsChecked);
         });
+    }
+
+    /// <summary>Closing with unsaved edits asks "Save your changes?"; tests discard them first so no modal blocks.</summary>
+    private void CloseDiscarding(MainWindow w)
+    {
+        ((SettingsViewModel)w.DataContext).Load(ui.App.Config);
+        w.Close();
     }
 
     private static Button FindButton(DependencyObject root, string content)
