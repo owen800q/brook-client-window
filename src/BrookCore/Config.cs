@@ -75,7 +75,10 @@ public sealed class AppConfig : IEquatable<AppConfig>
         }
         foreach (var c in BypassCidrs)
         {
-            if (!IPv4Cidr.TryParse(c, out var cidr)) errors.Add($"Bypass: '{c}' is not an IPv4 address/CIDR");
+            if (!IPv4Cidr.TryParse(c, out var cidr))
+            {
+                if (!BypassDomain.TryNormalize(c, out _)) errors.Add($"Bypass: '{c}' is not an IPv4 address/CIDR or a domain like *.example.com");
+            }
             else if (cidr.Prefix < ProxyPlan.MinBypassPrefix) errors.Add($"Bypass: '{c}' is too broad (at most /{ProxyPlan.MinBypassPrefix})");
         }
         foreach (var (label, port) in new[] { ("SOCKS5", SocksPort), ("HTTP", HttpPort) })

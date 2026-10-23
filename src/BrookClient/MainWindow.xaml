@@ -218,11 +218,11 @@
         <TabItem Header="Bypass">
           <DockPanel Margin="10">
             <TextBlock DockPanel.Dock="Top" Style="{StaticResource Caption}"
-                       Text="These addresses never go through Brook. One IPv4 address or CIDR per line. Defaults: your private networks (LAN), link-local and multicast." />
+                       Text="These addresses never go through Brook. One IPv4 address, CIDR or domain per line (example.com, or *.example.com for every name under it). Defaults: your private networks (LAN), link-local and multicast." />
             <StackPanel DockPanel.Dock="Bottom" Margin="0,6,0,0">
               <Button Content="Reset to Private Networks" HorizontalAlignment="Left" Click="ResetBypass_Click" />
               <TextBlock Style="{StaticResource Caption}"
-                         Text="Windows matches these against the address typed in an app (http://192.168.0.10). Names without a dot (http://nas), *.local names and localhost are always bypassed too." />
+                         Text="Windows matches these against the address or name typed in an app (http://192.168.0.10, https://www.example.org). Names without a dot (http://nas), *.local names and localhost are always bypassed too." />
             </StackPanel>
             <TextBox Text="{Binding BypassText, UpdateSourceTrigger=PropertyChanged}" AcceptsReturn="True"
                      FontFamily="{StaticResource Retro.FontFamily.Mono}"
