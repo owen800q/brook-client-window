@@ -111,7 +111,7 @@ public class ConfigTests
         {
             Profiles = [new Profile("bad", "nope")],
             SelectedIndex = 0,
-            BypassCidrs = ["192.168.0.0/16", "bogus", "0.0.0.0/1"],
+            BypassCidrs = ["192.168.0.0/16", "*.corp", "bogus", "0.0.0.0/1"],
             SocksPort = 70000,
         };
         var problems = c.ValidationErrors();

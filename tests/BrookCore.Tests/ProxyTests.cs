@@ -63,6 +63,30 @@ public class ProxyPlanTests
     }
 
     [Fact]
+    public void DomainsPassThroughAsWildcards()
+    {
+        var plan = new ProxyPlan(1081, ["*.corp", "Example.COM", "*.example.com", "*.corp", "10.0.0.0/8"]);
+        Assert.Single(plan.BypassPatterns, "*.corp");
+        Assert.Contains("example.com", plan.BypassPatterns);
+        Assert.Contains("*.example.com", plan.BypassPatterns);
+        Assert.EndsWith(";*.corp;example.com;*.example.com;10.*;<local>", plan.ProxyOverride);
+    }
+
+    [Theory]
+    [InlineData("*.corp", true)]
+    [InlineData("example.org", true)]
+    [InlineData("*.my-site.co.uk", true)]
+    [InlineData("corp", false)]   // dot-less: already bypassed by <local>
+    [InlineData("*", false)]
+    [InlineData("*.", false)]
+    [InlineData("a..b", false)]
+    [InlineData("-a.com", false)]
+    [InlineData("10.0.0", false)]
+    [InlineData("a*.com", false)]
+    [InlineData("http://a.com", false)]
+    public void DomainValidation(string raw, bool ok) => Assert.Equal(ok, BypassDomain.TryNormalize(raw, out _));
+
+    [Fact]
     public void RejectsBadInput()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => new ProxyPlan(0, []));

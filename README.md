@@ -50,7 +50,7 @@ Closing the window keeps Brook Client running in the notification area. Left-cli
 Settings:
 - **Servers**: name and link per server; ● picks the one used for Connect. Supported link kinds: `server`, `wsserver`, `wssserver`, `quicserver`. (`socks5` links can't be used with `brook connect`.)
 - **Connection**: set the Windows proxy (on by default) or only run the local proxies; reach the server through an HTTP proxy (see below); SOCKS5/HTTP ports; UDP over TCP (needed when your server's firewall blocks UDP).
-- **Bypass**: IPv4 addresses/CIDRs that always go direct. Windows matches them against the address typed in an app, so `http://192.168.0.10` is direct, and names without a dot (`http://nas`) are always direct.
+- **Bypass**: IPv4 addresses/CIDRs and domains that always go direct. Windows matches them against the address or name typed in an app, so `192.168.0.0/16` makes `http://192.168.0.10` direct, `*.corp` makes every name under `corp` direct and `example.com` matches only that exact name, and names without a dot (`http://nas`) are always direct.
 - **General**: connect on start, start at sign-in (your own `HKCU\...\Run` entry, which starts hidden in the notification area), and file locations.
 
 ### Networks that need an HTTP proxy
@@ -99,11 +99,11 @@ To regenerate the icons from `assets/AppIcon.png` (the macOS icon), run `python 
 
 ### Layout
 
-- `src/BrookCore`: pure, tested logic with no Windows dependency. It is a port of the macOS `BrookCore`: link parsing and IP pinning, CIDRs, config, plus the Windows proxy plan (CIDR → WinINet bypass wildcards) and the proxy backup/restore.
+- `src/BrookCore`: pure, tested logic with no Windows dependency. It is a port of the macOS `BrookCore`: link parsing and IP pinning, CIDRs, config, plus the Windows proxy plan (CIDRs and domains → WinINet bypass wildcards) and the proxy backup/restore.
 - `src/BrookClient`: the WPF app (Retro.NET theme): notification-area icon and menu, main window, and the engine that runs brook, health checks, reconnects and the crash watchdog.
 - `tests/`: `BrookCore.Tests` (cross-platform) and `BrookClient.WindowsTests` (Windows only).
 
 ### Known limitations
 - Only apps that honor the Windows proxy are routed through Brook, and UDP is not proxied for them.
-- Bypass rules match the host text an app uses, not resolved addresses: a LAN device reached by a dotted name (`tv.home.arpa`) goes through the proxy; use its IP address instead. Dot-less names and `*.local` are always bypassed.
+- Bypass rules match the host text an app uses, not resolved addresses: a LAN device reached by a dotted name (`tv.home.arpa`) goes through the proxy unless you add that name (or `*.home.arpa`) to the list. Dot-less names and `*.local` are always bypassed.
 - The brook link (including its password) appears in `brook connect`'s process arguments, as with the brook CLI itself.

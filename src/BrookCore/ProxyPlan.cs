@@ -28,6 +28,11 @@ public sealed class ProxyPlan
         var patterns = new List<string>(LocalNames);
         foreach (var raw in bypass)
         {
+            if (!IPv4Cidr.TryParse(raw, out _) && BypassDomain.TryNormalize(raw, out var domain))
+            {
+                if (!patterns.Contains(domain)) patterns.Add(domain);
+                continue;
+            }
             var cidr = IPv4Cidr.Parse(raw);
             if (cidr.Prefix < MinBypassPrefix) throw new ArgumentException($"Bypass '{raw}' is too broad", nameof(bypass));
             foreach (var w in Wildcards(cidr)) if (!patterns.Contains(w)) patterns.Add(w);
@@ -59,6 +64,26 @@ public sealed class ProxyPlan
         var list = new List<string>((int)count);
         for (var i = 0u; i < count; i++) list.Add($"{head}{octets[full] + i}{tail}");
         return list;
+    }
+}
+
+/// <summary>
+/// A domain bypass entry: <c>example.com</c> (that exact name) or <c>*.example</c> (every name under it), which WinINet
+/// matches as written. A bare dot-less name is not accepted: <c>&lt;local&gt;</c> already bypasses those.
+/// </summary>
+public static class BypassDomain
+{
+    public static bool TryNormalize(string raw, out string domain)
+    {
+        domain = raw.Trim().ToLowerInvariant();
+        var name = domain.StartsWith("*.", StringComparison.Ordinal) ? domain[2..] : domain;
+        var labels = name.Split('.');
+        var ok = name.Length is > 0 and <= 253
+            && (labels.Length >= 2 || name.Length < domain.Length)
+            && labels.All(l => l.Length is > 0 and <= 63 && l[0] != '-' && l[^1] != '-' && l.All(c => char.IsAsciiLetterOrDigit(c) || c == '-'))
+            && !labels[^1].All(char.IsAsciiDigit); // "10.0.0" is a mistyped address, not a domain
+        if (!ok) domain = "";
+        return ok;
     }
 }
 
