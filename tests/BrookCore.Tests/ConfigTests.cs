@@ -127,6 +127,51 @@ public class ConfigTests
         Assert.Contains(new AppConfig { HttpPort = 1080 }.ValidationErrors(), p => p.Contains("must differ"));
 
     [Fact]
+    public void BrookPathDefaultsToBrookExeNextToTheApp()
+    {
+        var app = Path.Combine(Path.GetTempPath(), "app");
+        var exe = Path.Combine(app, "brook.exe");
+        Assert.Equal(exe, BrookBinary.Resolve("", app, p => p == exe));
+        Assert.Equal(exe, BrookBinary.Resolve(null, app, p => p == exe));
+        Assert.Null(BrookBinary.Resolve("", app, _ => false));
+        Assert.Contains("brook.exe not found", BrookBinary.NotFound("", app));
+    }
+
+    [Fact]
+    public void BrookPathCanBeRenamedOrAnywhere()
+    {
+        var app = Path.Combine(Path.GetTempPath(), "app");
+        var renamed = Path.Combine(app, "core.exe");
+        Assert.Equal(renamed, BrookBinary.Resolve(" core.exe ", app, p => p == renamed));
+        // A chosen file is used as is: no falling back to brook.exe when it's missing.
+        Assert.Null(BrookBinary.Resolve("core.exe", app, p => p == Path.Combine(app, "brook.exe")));
+        Assert.Contains(renamed, BrookBinary.NotFound("core.exe", app));
+        var elsewhere = Path.Combine(Path.GetTempPath(), "tools", "x.exe");
+        Assert.Equal(elsewhere, BrookBinary.Resolve(elsewhere, app, p => p == elsewhere));
+    }
+
+    [Fact]
+    public void BrookPathIsValidated()
+    {
+        Assert.Null(BrookBinary.Problem(""));
+        Assert.Null(BrookBinary.Problem("core.exe"));
+        Assert.Null(BrookBinary.Problem("CORE.EXE"));
+        Assert.NotNull(BrookBinary.Problem("core"));
+        Assert.NotNull(BrookBinary.Problem("co?re.exe"));
+        Assert.Contains(new AppConfig { BrookPath = "core.txt" }.ValidationErrors(), e => e.Contains(".exe"));
+    }
+
+    [Fact]
+    public void BrookPathRoundTrips()
+    {
+        var store = new ConfigStore(TempPath());
+        var c = new AppConfig { BrookPath = "core.exe" };
+        store.Save(c);
+        Assert.Equal("core.exe", store.Load().BrookPath);
+        Assert.NotEqual(new AppConfig(), store.Load());
+    }
+
+    [Fact]
     public void CloneIsDeep()
     {
         var c = new AppConfig { Profiles = [new Profile("a", "brook://x")] };

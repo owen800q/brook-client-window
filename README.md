@@ -27,7 +27,7 @@ Creating a virtual network adapter (TUN/Wintun) and changing routes on Windows r
 
 Get `BrookClient-<version>-windows-x64.zip` (or `-arm64`) from [Releases](https://github.com/owen800q/brook-client-window/releases). A new release is published for every commit to `main`, versioned `YYYY.MMDD.<build number>`.
 
-1. Unzip it anywhere you can write to, for example `Downloads` or `%LOCALAPPDATA%\Programs\BrookClient`. Keep `BrookClient.exe` and `brook.exe` together.
+1. Unzip it anywhere you can write to, for example `Downloads` or `%LOCALAPPDATA%\Programs\BrookClient`. Keep `BrookClient.exe` and `brook.exe` together. To use a renamed copy of brook (or one in another folder), set it under **General → brook program**.
 2. Run `BrookClient.exe`. The app is not code-signed, so SmartScreen may warn you the first time. Click **More info → Run anyway**; this does not need admin rights.
 
 Windows 10 or 11 is required. The exe is self-contained, so you don't need to install .NET.

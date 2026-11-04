@@ -42,6 +42,9 @@ public sealed class AppConfig : IEquatable<AppConfig>
     public bool UdpOverTcp { get; set; } = true;
     /// <summary>Point the Windows (per-user) proxy settings at brook while connected. Off = only run the local proxies.</summary>
     public bool SetSystemProxy { get; set; } = true;
+    /// <summary>The brook program to run. Empty = brook.exe next to BrookClient.exe. A bare file name or relative path is
+    /// looked up in the app's folder, so a renamed copy next to the app needs only its name.</summary>
+    public string BrookPath { get; set; } = "";
 
     /// <summary>For networks where the internet is only reachable through an HTTP proxy.</summary>
     public UpstreamProxyMode UpstreamProxy { get; set; } = UpstreamProxyMode.Off;
@@ -84,6 +87,7 @@ public sealed class AppConfig : IEquatable<AppConfig>
         foreach (var (label, port) in new[] { ("SOCKS5", SocksPort), ("HTTP", HttpPort) })
             if (port is < 1 or > 65535) errors.Add($"{label} port {port} is out of range");
         if (SocksPort == HttpPort) errors.Add("SOCKS5 and HTTP ports must differ");
+        if (BrookBinary.Problem(BrookPath) is { } brookProblem) errors.Add(brookProblem);
         if (UpstreamProxy == UpstreamProxyMode.Manual)
         {
             if (!UpstreamProxyEndpoint.IsValidHost(UpstreamProxyHost.Trim())) errors.Add("Proxy: enter the proxy's host name or IP address");
@@ -109,7 +113,7 @@ public sealed class AppConfig : IEquatable<AppConfig>
         && SocksPort == o.SocksPort && HttpPort == o.HttpPort && ConnectOnLaunch == o.ConnectOnLaunch && UdpOverTcp == o.UdpOverTcp
         && SetSystemProxy == o.SetSystemProxy && UpstreamProxy == o.UpstreamProxy && UpstreamProxyHost == o.UpstreamProxyHost
         && UpstreamProxyPort == o.UpstreamProxyPort && UpstreamProxyUsername == o.UpstreamProxyUsername
-        && UpstreamProxyPassword == o.UpstreamProxyPassword;
+        && UpstreamProxyPassword == o.UpstreamProxyPassword && BrookPath == o.BrookPath;
 
     public override bool Equals(object? obj) => Equals(obj as AppConfig);
     public override int GetHashCode() => HashCode.Combine(Profiles.Count, SelectedIndex, SocksPort, HttpPort);
@@ -164,6 +168,7 @@ public sealed class ConfigStore(string path, ISecretProtector? protector = null)
         c.Profiles ??= [];
         c.BypassCidrs ??= [.. AppConfig.DefaultBypass];
         c.UpstreamProxyHost ??= "";
+        c.BrookPath ??= "";
         c.UpstreamProxyUsername ??= "";
         c.UpstreamProxyPassword = c.UpstreamProxyPasswordData is { Length: > 0 } data ? _protector.Unprotect(data) ?? "" : "";
         c.UpstreamProxyPasswordData = null;
@@ -179,6 +184,43 @@ public sealed class ConfigStore(string path, ISecretProtector? protector = null)
         finally { config.UpstreamProxyPasswordData = null; }
         if (!OperatingSystem.IsWindows()) File.SetUnixFileMode(tmp, UnixFileMode.UserRead | UnixFileMode.UserWrite); // links contain passwords
         File.Move(tmp, Path, overwrite: true);
+    }
+}
+
+/// <summary>Finds the brook program: the one chosen in settings, or brook.exe shipped next to the app.</summary>
+public static class BrookBinary
+{
+    public const string DefaultName = "brook.exe";
+
+    /// <summary>Why <paramref name="configured"/> can't be a program path, or null if it can (empty = the default).</summary>
+    public static string? Problem(string? configured)
+    {
+        var p = configured?.Trim() ?? "";
+        if (p.Length == 0) return null;
+        if (p.IndexOfAny(System.IO.Path.GetInvalidPathChars()) >= 0 || p.IndexOfAny(['"', '<', '>', '|', '*', '?']) >= 0)
+            return $"brook program: '{p}' is not a valid file path";
+        if (!p.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)) return "brook program: choose an .exe file";
+        return null;
+    }
+
+    /// <summary>The program to run, or null if it doesn't exist. Relative paths are taken from <paramref name="appDir"/>.</summary>
+    public static string? Resolve(string? configured, string appDir, Func<string, bool>? exists = null)
+    {
+        exists ??= File.Exists;
+        var p = configured?.Trim() ?? "";
+        string[] candidates = p.Length == 0
+            ? [System.IO.Path.Combine(appDir, DefaultName), System.IO.Path.Combine(appDir, "bin", DefaultName)]
+            : [System.IO.Path.GetFullPath(System.IO.Path.Combine(appDir, Environment.ExpandEnvironmentVariables(p)))];
+        return candidates.FirstOrDefault(exists);
+    }
+
+    /// <summary>The error shown when <see cref="Resolve"/> finds nothing.</summary>
+    public static string NotFound(string? configured, string appDir)
+    {
+        var p = configured?.Trim() ?? "";
+        return p.Length == 0
+            ? $"{DefaultName} not found next to BrookClient.exe. Put it there, or choose the brook program on the General tab"
+            : $"brook program not found: {System.IO.Path.GetFullPath(System.IO.Path.Combine(appDir, Environment.ExpandEnvironmentVariables(p)))}";
     }
 }
 

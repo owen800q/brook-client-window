@@ -268,7 +268,7 @@ internal sealed class Engine
         if (!BrookLink.TryParse(profile.Link, out var link)) throw new Failure($"Invalid brook link for '{profile.Name}'");
         var problems = config.ValidationErrors();
         if (problems.Count > 0) throw new Failure(string.Join("; ", problems));
-        var brookPath = AppPaths.Brook ?? throw new Failure("brook.exe not found next to BrookClient.exe");
+        var brookPath = AppPaths.BrookFor(config) ?? throw new Failure(BrookBinary.NotFound(config.BrookPath, AppPaths.AppDir));
 
         foreach (var port in new[] { config.SocksPort, config.HttpPort })
             if (Net.PortInUse(port)) throw new Failure($"Port {port} is already in use by another program");
@@ -463,12 +463,9 @@ internal static class AppPaths
 {
     public static string AppDir => AppContext.BaseDirectory;
 
-    public static string? Brook
-    {
-        get
-        {
-            var candidates = new[] { Path.Combine(AppDir, "brook.exe"), Path.Combine(AppDir, "bin", "brook.exe") };
-            return candidates.FirstOrDefault(File.Exists);
-        }
-    }
+    /// <summary>The default brook.exe shipped next to the app.</summary>
+    public static string? Brook => BrookBinary.Resolve(null, AppDir);
+
+    /// <summary>The brook program chosen in <paramref name="config"/> (or the default).</summary>
+    public static string? BrookFor(AppConfig config) => BrookBinary.Resolve(config.BrookPath, AppDir);
 }

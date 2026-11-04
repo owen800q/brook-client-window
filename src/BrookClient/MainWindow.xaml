@@ -242,6 +242,19 @@
                              Text="Starts hidden in the notification area. Uses your own startup list (HKCU\...\Run), so no administrator rights are needed. Applies immediately." />
                 </StackPanel>
               </GroupBox>
+              <GroupBox Header="brook program" Margin="0,8,0,0">
+                <StackPanel Margin="4">
+                  <DockPanel>
+                    <Button DockPanel.Dock="Right" Content="_Default" Margin="6,0,0,0" Click="DefaultBrook_Click"
+                            ToolTip="Use brook.exe next to BrookClient.exe" />
+                    <Button DockPanel.Dock="Right" Content="_Browse…" Margin="6,0,0,0" Click="BrowseBrook_Click" />
+                    <TextBox x:Name="BrookPathBox" Text="{Binding BrookPath, UpdateSourceTrigger=PropertyChanged}"
+                             FontFamily="{StaticResource Retro.FontFamily.Mono}" retro:Assist.Placeholder="brook.exe (next to BrookClient.exe)" />
+                  </DockPanel>
+                  <TextBlock Style="{StaticResource Caption}"
+                             Text="The brook program to run. Leave empty for brook.exe next to BrookClient.exe. To use a renamed copy, put it next to the app and type its name (for example core.exe), or choose a file anywhere. Applies on the next connect." />
+                </StackPanel>
+              </GroupBox>
               <GroupBox Header="Files" Margin="0,8,0,0">
                 <StackPanel Margin="4">
                   <retro:FormField Label="Settings" LabelWidth="70">
