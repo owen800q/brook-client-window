@@ -141,6 +141,60 @@ public partial class MainWindow : RetroWindow
 
     private void ResetBypass_Click(object sender, RoutedEventArgs e) => _model.ResetBypass();
 
+    private void DefaultBrook_Click(object sender, RoutedEventArgs e) => _model.BrookPath = "";
+
+    private async void BrowseBrook_Click(object sender, RoutedEventArgs e)
+    {
+        var current = BrookBinary.Resolve(_model.BrookPath, AppPaths.AppDir) ?? AppPaths.Brook;
+        var dialog = new Microsoft.Win32.OpenFileDialog
+        {
+            Title = "Choose the brook program",
+            Filter = "Programs (*.exe)|*.exe",
+            InitialDirectory = Path.GetDirectoryName(current) ?? AppPaths.AppDir,
+            CheckFileExists = true,
+        };
+        if (dialog.ShowDialog(this) != true) return;
+        var file = dialog.FileName;
+        // Next to the app: keep just the name, so the folder can be moved.
+        var appDir = Path.TrimEndingDirectorySeparator(Path.GetFullPath(AppPaths.AppDir));
+        _model.BrookPath = string.Equals(Path.GetDirectoryName(file), appDir, StringComparison.OrdinalIgnoreCase)
+            ? Path.GetFileName(file)
+            : file;
+
+        // Catch a wrong file now rather than at connect time.
+        var version = await Task.Run(() => BrookVersion(file));
+        if (version is null)
+            RetroMessageBox.Show(this, $"{Path.GetFileName(file)} doesn't look like brook (it didn't answer --version). " +
+                "Connecting will fail if it isn't brook.", "Brook Client", MessageBoxButton.OK, MessageBoxImage.Warning, MessageBoxResult.OK);
+    }
+
+    /// <summary>The program's "--version" line if it looks like brook, otherwise null.</summary>
+    private static string? BrookVersion(string file)
+    {
+        try
+        {
+            var psi = new System.Diagnostics.ProcessStartInfo(file, "--version")
+            {
+                UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true,
+            };
+            using var p = System.Diagnostics.Process.Start(psi);
+            if (p is null) return null;
+            var output = p.StandardOutput.ReadToEndAsync();
+            var error = p.StandardError.ReadToEndAsync();
+            if (!p.WaitForExit(5000))
+            {
+                p.Kill(entireProcessTree: true);
+                return null;
+            }
+            var text = (output.Result + error.Result).Trim();
+            return text.Contains("brook", StringComparison.OrdinalIgnoreCase) ? text : null;
+        }
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException or IOException)
+        {
+            return null;
+        }
+    }
+
     private void LaunchAtLogin_Click(object sender, RoutedEventArgs e)
     {
         try

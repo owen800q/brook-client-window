@@ -56,6 +56,7 @@ public sealed class SettingsViewModel : Observable
     private bool _connectOnLaunch;
     private bool _udpOverTcp;
     private bool _setSystemProxy;
+    private string _brookPath = "";
     private UpstreamProxyMode _upstreamMode;
     private string _upstreamHost = "";
     private string _upstreamPort = "";
@@ -80,6 +81,8 @@ public sealed class SettingsViewModel : Observable
     public bool ConnectOnLaunch { get => _connectOnLaunch; set { if (Set(ref _connectOnLaunch, value)) Changed(); } }
     public bool UdpOverTcp { get => _udpOverTcp; set { if (Set(ref _udpOverTcp, value)) Changed(); } }
     public bool SetSystemProxy { get => _setSystemProxy; set { if (Set(ref _setSystemProxy, value)) Changed(); } }
+    /// <summary>Empty = brook.exe next to the app.</summary>
+    public string BrookPath { get => _brookPath; set { if (Set(ref _brookPath, value)) Changed(); } }
 
     public UpstreamProxyMode UpstreamMode
     {
@@ -126,6 +129,7 @@ public sealed class SettingsViewModel : Observable
         ConnectOnLaunch = c.ConnectOnLaunch;
         UdpOverTcp = c.UdpOverTcp;
         SetSystemProxy = c.SetSystemProxy;
+        BrookPath = c.BrookPath;
         UpstreamMode = c.UpstreamProxy;
         UpstreamHost = c.UpstreamProxyHost;
         UpstreamPort = c.UpstreamProxyPort.ToString();
@@ -146,6 +150,7 @@ public sealed class SettingsViewModel : Observable
             ConnectOnLaunch = ConnectOnLaunch,
             UdpOverTcp = UdpOverTcp,
             SetSystemProxy = SetSystemProxy,
+            BrookPath = BrookPath.Trim(),
             UpstreamProxy = UpstreamMode,
             UpstreamProxyHost = UpstreamHost.Trim(),
             UpstreamProxyPort = ParsePort(UpstreamPort),
